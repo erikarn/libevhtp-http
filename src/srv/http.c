@@ -59,6 +59,43 @@ thr_http_gen_cb(struct evhttp_request *req, void *cbdata)
 	evbuffer_free(evb);
 }
 
+/*
+ * Size-based callback.
+ *
+ * Look at the final fragment, use it as a 64 bit number
+ * and generate a response of that many bytes.
+ */
+static void
+thr_http_size_cb(struct evhttp_request *req, void *cbdata)
+{
+	struct http_srv_thread *th = cbdata;
+	struct evbuffer *evb;
+	char *buf;
+
+	buf = malloc(1024);
+
+	/*
+	 * ... for now, return the size string.
+	 * I'll see what I can do to parse out the URI query string
+	 * into components.
+	 *
+	 * .. and I have to do a streaming reply, not this
+	 * full buffer response.
+	 */
+	evb = evbuffer_new();
+	evbuffer_add_printf(evb, "OK '%s'\r\n", evhttp_request_get_uri(req));
+	evbuffer_add_reference(evb, buf, 1024, thr_http_free_cb, NULL);
+
+	evhttp_send_reply(req, HTTP_OK, "OK", evb);
+	/*
+	 * evhttp_send_reply() -> evhttp_send() will copy the evbuffer data
+	 * into its own private data buffer.
+	 */
+	evbuffer_free(evb);
+}
+
+
+
 static int
 thr_sock_set_reuseaddr(int fd, int reuse_addr)
 {
@@ -254,6 +291,8 @@ thr_http_init(void *arg)
 	if (th->s6 != -1)
 		(void) evhttp_accept_socket(th->h, th->s6);
 
+	/* Size-based response generation */
+	(void) evhttp_set_cb(th->h, "/size", thr_http_size_cb, th);
 	/* Default dispatch */
 	(void) evhttp_set_gencb(th->h, thr_http_gen_cb, th);
 

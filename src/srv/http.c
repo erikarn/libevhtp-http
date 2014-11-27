@@ -96,7 +96,7 @@ thr_sock_set_reuseaddr(int fd, int reuse_addr)
 #endif
 
 /*
- * Setup the RSS state for a listen socket.
+ * Setup the state for a listen socket.
  *
  * Call after socket creation, before bind() and listen().
  */
@@ -112,7 +112,7 @@ thr_rss_listen_sock_setup(int fd, int af_family)
 }
 
 /*
- * IPv4 RSS listen socket creation - ipv4.
+ * IPv4 listen socket creation - ipv4.
  */
 static int
 thr_rss_listen_sock_create_ipv4(void)
@@ -167,7 +167,7 @@ error:
 }
 
 /*
- * IPv6 RSS listen socket creation.
+ * IPv6 listen socket creation.
  */
 static int
 thr_rss_listen_sock_create_ipv6(void)
@@ -231,7 +231,7 @@ thr_http_init(void *arg)
 	struct sockaddr_in6 sa6;
 	char buf[128];
 
-	/* thread pin for RSS */
+	/* thread pin if required */
 	if (th->cpuid != -1) {
 		cpuset_t cp;
 		CPU_ZERO(&cp);

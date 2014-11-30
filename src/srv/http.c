@@ -27,6 +27,15 @@ typedef enum {
 	REQ_TYPE_SIZE,
 } req_type_t;
 
+struct thr {
+	int t_tid;		/* thread id; local */
+	int t_listen_fd;	/* listen_fd, or -1 for "we just asked evhtp for one */
+	int t_our_fd;		/* 1 if the listen_fd is ours to use */
+	pthread_t t_thr;
+	evbase_t *t_evbase;
+	evhtp_t  *t_htp;
+};
+
 struct req {
 	evhtp_request_t *req;
 
@@ -365,6 +374,20 @@ sizecb(evhtp_request_t * req, void * a)
 	req_set_type_buf(r, 131072);
 	req_start_response(r);
 }
+
+#if 0
+static int
+thr_setup(struct thr *th, int tid)
+{
+	th->t_listen_fd = -1;
+	th->t_our_fd = 0;
+	th->t_tid = tid;
+	th->t_evbase = event_base_new();
+	th->t_htp = evhtp_new(th->ev_base, NULL);
+
+	return (0);
+}
+#endif
 
 int
 main(int argc, char ** argv) {

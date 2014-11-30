@@ -3,7 +3,7 @@ PROG=httpsrv
 SRCS=http.c
 LDADD=-lpthread
 
-# libevent
+# libevent / libevhtp
 CFLAGS+=-I/usr/local/include
 LDFLAGS+=-L/usr/local/lib/
 LDADD+= -levent -levent_pthreads -levhtp

@@ -238,6 +238,13 @@ send_upstream_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg
 	return (EVHTP_RES_OK);
 }
 
+/*
+ * This is called whenever the underlying HTTP write has made
+ * some progress.
+ *
+ * TODO: we should be more selective about when we write data
+ * by checking how much data is in the outbound write buffer.
+ */
 evhtp_res
 send_upstream_on_write(evhtp_connection_t * conn, void * arg)
 {

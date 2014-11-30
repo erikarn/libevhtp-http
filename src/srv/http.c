@@ -16,8 +16,10 @@
 
 #include <netinet/in.h>
 
-
 #include <evhtp.h>
+
+#define	debug_printf(...)
+//#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
 struct req {
 	int cur_count;
@@ -55,7 +57,7 @@ static evhtp_res
 send_upstream_new_chunk(evhtp_request_t * upstream_req, uint64_t len, void * arg)
 {
 
-	printf("%s: called\n", __func__);
+	debug_printf("%s: called\n", __func__);
 	return EVHTP_RES_OK;
 }
 
@@ -63,7 +65,7 @@ evhtp_res
 send_upstream_chunk_done(evhtp_request_t * upstream_req, void * arg)
 {
 
-	printf("%s: called\n", __func__);
+	debug_printf("%s: called\n", __func__);
 	return EVHTP_RES_OK;
 }
 
@@ -71,16 +73,22 @@ evhtp_res
 send_upstream_chunks_done(evhtp_request_t * upstream_req, void * arg)
 {
 
-	printf("%s: called\n", __func__);
+	debug_printf("%s: called\n", __func__);
 	return (EVHTP_RES_OK);
 }
 
+/*
+ * Called upon socket error.
+ */
 evhtp_res
 send_upstream_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 {
+	struct req *r = arg;
 
-	printf("%s: called\n", __func__);
+	debug_printf("%s: %p: called\n", __func__, r);
 	evhtp_unset_all_hooks(&req->hooks);
+
+	req_free(r);
 
 	return (EVHTP_RES_OK);
 }
@@ -91,7 +99,7 @@ send_upstream_on_write(evhtp_connection_t * conn, void * arg)
 	struct req *r = arg;
 	struct evbuffer *evb;
 
-	printf("%s: called\n", __func__);
+	debug_printf("%s: called\n", __func__);
 
 	evb = evbuffer_new();
 	/* XXX free callback - not needed; this is a static buffer */
@@ -99,13 +107,12 @@ send_upstream_on_write(evhtp_connection_t * conn, void * arg)
 	evhtp_send_reply_chunk(r->req, evb);
 	evbuffer_free(evb);
 
-#if 0
+#if 1
 	r->cur_count++;
 	if (r->cur_count >= r->max_count) {
 		evhtp_unset_hook(&r->req->conn->hooks, evhtp_hook_on_write);
 		evhtp_send_reply_chunk_end(r->req);
-		/* XXX free request? what about req? */
-		req_free(r);
+		/* This will wrap up the connection for us via the fini path */
 	}
 #endif
 
@@ -118,13 +125,13 @@ send_upstream_on_write(evhtp_connection_t * conn, void * arg)
 evhtp_res
 send_upstream_fini(evhtp_request_t * upstream_req, void * arg)
 {
+	struct req *r = arg;
 
-	printf("%s: called\n", __func__);
+	debug_printf("%s: %p: called\n", __func__, r);
 
-	/*
-	 * XXX TODO: so what's the right place to slide in
-	 * the tidyup if there's an error? Here?
-	 */
+	evhtp_unset_all_hooks(&r->req->hooks);
+	req_free(r);
+
 	return (EVHTP_RES_OK);
 }
 

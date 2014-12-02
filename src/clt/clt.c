@@ -18,6 +18,8 @@
 
 #include <evhtp.h>
 
+#include "clt.h"
+
 //#define	debug_printf(...)
 #define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
@@ -45,48 +47,11 @@ struct clt_thr {
 };
 
 /*
- * A client request will have a connection (con) to an IP address, and then
- * one or more outstanding HTTP requests.
- *
- * I'm not sure if libevhtp supports HTTP pipelining at the present time,
- * so let's just assume a single request at a time.
- */
-struct client_req {
-	evhtp_connection_t *con;
-	evhtp_request_t *req;
-	struct clt_thr *thr;
-
-	/* Connection details */
-	char *host;
-	int port;
-
-	/* Request URI */
-	char *uri;
-
-	/*
-	 * How many requests to issue before this client
-	 * request is torn down.
-	 */
-	int nreq;
-
-	/* How much data was read */
-	size_t cur_read_ptr;
-
-#if 0
-	/* Read buffer - mostly just scratch-space to read into */
-	struct {
-		char *buf;
-		int size;
-	} buf;
-#endif
-};
-
-/*
  * Free a connection, including whichever request is on it.
  *
  * Note: this will call the request free path as well if req is non-NULL.
  */
-static void
+void
 clt_conn_destroy(struct client_req *req)
 {
 
@@ -111,10 +76,9 @@ clt_conn_destroy(struct client_req *req)
 /*
  * Destroy the currently active request.
  */
-static void
+void
 clt_req_destroy(struct client_req *req)
 {
-
 
 	debug_printf("%s: %p: called\n", __func__, req);
 
@@ -161,7 +125,7 @@ clt_upstream_chunks_done(evhtp_request_t * upstream_req, void * arg)
 /*
  * Called upon socket error.
  */
-evhtp_res
+static evhtp_res
 clt_upstream_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 {
 	struct client_req *r = arg;
@@ -192,7 +156,7 @@ clt_upstream_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 /*
  * Callback: finished - error and non-error
  */
-evhtp_res
+static evhtp_res
 clt_upstream_fini(evhtp_request_t * upstream_req, void * arg)
 {
 	struct client_req *r = arg;
@@ -212,13 +176,12 @@ clt_upstream_fini(evhtp_request_t * upstream_req, void * arg)
 	return (EVHTP_RES_OK);
 }
 
-
 /*
  * Create a connection to the given host/port.
  *
  * This doesn't create a HTTP request - just the TCP connection.
  */
-static struct client_req *
+struct client_req *
 clt_conn_create(struct clt_thr *thr, const char *host, int port)
 {
 	struct client_req *r;
@@ -273,7 +236,7 @@ clt_req_cb(evhtp_request_t *r, void *arg)
 	clt_req_destroy(req);
 }
 
-static int
+int
 clt_req_create(struct client_req *req, const char *uri)
 {
 
@@ -325,93 +288,4 @@ clt_req_create(struct client_req *req, const char *uri)
 
 	fprintf(stderr, "%s: %p: done!\n", __func__, req);
 	return (0);
-}
-
-static int
-clt_mgr_setup(struct clt_thr *th)
-{
-	int i;
-	struct client_req *r;
-
-	/* For now, open 8 connections right now */
-	/* Later this should be staggered via timer events */
-	th->target_nconn = 8;
-
-	for (i = 0; i < 8; i++) {
-		r = clt_conn_create(th, th->host, th->port);
-		fprintf(stderr, "%s: %p: created\n", __func__, r);
-		if (r == NULL)
-			continue;
-		(void) clt_req_create(r, th->uri);
-	}
-
-	return (0);
-}
-
-static void
-clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
-{
-	struct clt_thr *th = arg;
-	struct timeval tv;
-
-	tv.tv_sec = 1;
-	tv.tv_usec = 0;
-
-	debug_printf("%s: %p: called\n", __func__, th);
-	evtimer_add(th->t_timerev, &tv);
-}
-
-static int
-clt_thr_setup(struct clt_thr *th, int tid)
-{
-	struct timeval tv;
-
-	th->t_tid = tid;
-	th->t_evbase = event_base_new();
-	th->t_htp = evhtp_new(th->t_evbase, NULL);
-	th->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, th);
-
-	tv.tv_sec = 1;
-	tv.tv_usec = 0;
-	evtimer_add(th->t_timerev, &tv);
-
-	return (0);
-}
-
-static int
-clt_mgr_config(struct clt_thr *th, const char *host, int port, const char *uri)
-{
-
-	/* XXX TODO: error chceking */
-	th->host = strdup(host);
-	th->port = 8080;
-	th->uri = strdup(uri);
-
-	return (0);
-}
-
-int
-main(int argc, const char *argv[])
-{
-	struct clt_thr *th;
-
-	th = calloc(1, sizeof(*th));
-	if (th == NULL) {
-		err(127, "%s: calloc", __func__);
-	}
-
-	/* Create thread state */
-	if (clt_thr_setup(th, 0) != 0)
-		exit(127);
-
-	/* Test configuration */
-	clt_mgr_config(th, "127.0.0.1", 8080, "/size");
-
-	/* Initial connection setup */
-	clt_mgr_setup(th);
-
-	/* Begin! */
-	event_base_loop(th->t_evbase, 0);
-
-	exit(0);
 }

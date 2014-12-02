@@ -1,6 +1,6 @@
 PROG=httpclt
 
-SRCS=clt.c
+SRCS=clt.c mgr.c main.c thr.c
 LDADD=-lpthread
 
 # libevent / libevhtp

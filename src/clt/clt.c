@@ -182,7 +182,8 @@ clt_upstream_fini(evhtp_request_t * upstream_req, void * arg)
  * This doesn't create a HTTP request - just the TCP connection.
  */
 struct client_req *
-clt_conn_create(struct clt_thr *thr, const char *host, int port)
+clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
+    const char *host, int port)
 {
 	struct client_req *r;
 
@@ -201,6 +202,8 @@ clt_conn_create(struct clt_thr *thr, const char *host, int port)
 	r->thr = thr;
 	r->uri = NULL;	/* No URI yet */
 	r->con = evhtp_connection_new(thr->t_evbase, r->host, r->port);
+	r->cb.cb = cb;
+	r->cb.cbdata = cbdata;
 	if (r->con == NULL) {
 		warn("%s: evhtp_connection_new", __func__);
 		goto error;

@@ -1,6 +1,9 @@
 #ifndef	__MGR_H__
 #define	__MGR_H__
 
+/*
+ * This is the instance of a client manager.
+ */
 struct clt_mgr {
 	struct clt_thr *thr;
 
@@ -9,6 +12,9 @@ struct clt_mgr {
 
 	/* How many open connections */
 	int nconn;
+
+	/* How many per burst */
+	int burst_conn;
 
 	/* how many to attempt to open */
 	int target_nconn;

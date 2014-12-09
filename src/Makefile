@@ -1,3 +1,3 @@
-SUBDIR=srv
+SUBDIR=srv clt
 
 .include <bsd.subdir.mk>

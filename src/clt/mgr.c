@@ -29,13 +29,14 @@ static int
 clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
     void *cbdata)
 {
-	struct clt_mgr *m = cbdata;
+	struct clt_mgr_conn *c = cbdata;
 
-	debug_printf("%s: %p: called, r=%p; what=%d\n",
+	debug_printf("%s: %p: called, r=%p; what=%d (%s)\n",
 	    __func__,
-	    m,
+	    c,
 	    r,
-	    what);
+	    what,
+	    clt_notify_to_str(what));
 
 	return (0);
 }
@@ -53,6 +54,37 @@ clt_mgr_setup(struct clt_mgr *m)
 	return (0);
 }
 
+static struct clt_mgr_conn *
+clt_mgr_conn_create(struct clt_mgr *mgr)
+{
+	struct clt_mgr_conn *c;
+
+	c = calloc(1, sizeof(*c));
+	if (c == NULL) {
+		warn("%s: calloc", __func__);
+		return (NULL);
+	}
+	c->mgr = mgr;
+	c->req = clt_conn_create(mgr->thr, clt_mgr_conn_notify_cb,
+	    c, mgr->host, mgr->port);
+	if (c->req == NULL) {
+		fprintf(stderr, "%s: clt_conn_create: failed\n", __func__);
+		goto error;
+	}
+
+	/* Kick start a HTTP request */
+	(void) clt_req_create(c->req, mgr->uri);
+
+	return (c);
+
+error:
+	if (c->req != NULL)
+		clt_conn_destroy(c->req);
+	if (c != NULL)
+		free(c);
+	return (NULL);
+}
+
 static void
 clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 {
@@ -60,7 +92,7 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	struct clt_mgr *m = arg;
 	struct clt_thr *th = m->thr;
 	struct timeval tv;
-	struct client_req *r;
+	struct clt_mgr_conn *c;
 
 	tv.tv_sec = 1;
 	tv.tv_usec = 0;
@@ -69,25 +101,10 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	    (i < m->target_nconn &&
 	    j <= m->burst_conn);
 	    i++, j++) {
-		/*
-		 * For now the global manager will just look after
-		 * each connection; I'll worry about allocating
-		 * per-connection (and maybe later per-request)
-		 * mgr state later.
-		 */
-		r = clt_conn_create(th, clt_mgr_conn_notify_cb, m,
-		    m->host, m->port);
-
-		/* Keep track of how many connections we have open */
-		m->nconn++;
-
-		fprintf(stderr, "%s: %p: created\n", __func__, r);
-
-		if (r == NULL)
+		c = clt_mgr_conn_create(m);
+		if (c == NULL)
 			continue;
-
-		/* Kick start a HTTP request */
-		(void) clt_req_create(r, m->uri);
+		m->nconn ++;
 	}
 
 	debug_printf("%s: %p: called\n", __func__, m);

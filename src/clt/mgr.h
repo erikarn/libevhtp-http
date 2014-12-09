@@ -23,6 +23,17 @@ struct clt_mgr {
 	char *uri;
 };
 
+/*
+ * This is an instance of a client connection, managing
+ * an actual client.
+ */
+struct clt_mgr_conn {
+	struct clt_mgr *mgr;
+
+	/* The actual connection/request */
+	struct client_req *req;
+};
+
 extern	int clt_mgr_config(struct clt_mgr *m, struct clt_thr *th,
 	    const char *host, int port, const char *uri);
 extern	int clt_mgr_setup(struct clt_mgr *m);

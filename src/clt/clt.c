@@ -46,6 +46,41 @@ struct clt_thr {
 	char *uri;
 };
 
+const char *
+clt_notify_to_str(clt_notify_cmd_t ct)
+{
+	switch (ct) {
+	case CLT_NOTIFY_NONE:
+		return "CLT_NOTIFY_NONE";
+	case CLT_NOTIFY_CONNECTED:
+		return "CLT_NOTIFY_CONNECTED";
+	case CLT_NOTIFY_CONNECT_ERROR:
+		return "CLT_NOTIFY_CONNECT_ERROR";
+	case CLT_NOTIFY_REQUEST_START:
+		return "CLT_NOTIFY_REQUEST_START";
+	case CLT_NOTIFY_REQUEST_DONE_OK:
+		return "CLT_NOTIFY_REQUEST_DONE_OK";
+	case CLT_NOTIFY_REQUEST_DONE_ERROR:
+		return "CLT_NOTIFY_REQUEST_DONE_ERROR";
+	case CLT_NOTIFY_CLOSING:
+		return "CLT_NOTIFY_CLOSING";
+	case CLT_NOTIFY_CONN_DESTROYING:
+		return "CLT_NOTIFY_CONN_DESTROYING";
+	case CLT_NOTIFY_REQ_DESTROYING:
+		return "CLT_NOTIFY_REQ_DESTROYING";
+	default:
+		return "<unknown>";
+	}
+}
+
+static void
+clt_call_notify(struct client_req *req, clt_notify_cmd_t ct)
+{
+
+	if (req->cb.cb != NULL)
+		req->cb.cb(req, ct, req->cb.cbdata);
+}
+
 /*
  * Free a connection, including whichever request is on it.
  *
@@ -54,6 +89,8 @@ struct clt_thr {
 void
 clt_conn_destroy(struct client_req *req)
 {
+
+	clt_call_notify(req, CLT_NOTIFY_CONN_DESTROYING);
 
 	/* free the request; disconnect hooks */
 	if (req->req) {
@@ -81,6 +118,7 @@ clt_req_destroy(struct client_req *req)
 {
 
 	debug_printf("%s: %p: called\n", __func__, req);
+	clt_call_notify(req, CLT_NOTIFY_REQ_DESTROYING);
 
 	if (req->req != NULL) {
 		/* free the request; disconnect hooks */
@@ -119,6 +157,8 @@ clt_upstream_chunks_done(evhtp_request_t * upstream_req, void * arg)
 	struct client_req *r = arg;
 
 	debug_printf("%s: %p: called\n", __func__, r);
+	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_OK);
+
 	return (EVHTP_RES_OK);
 }
 
@@ -149,6 +189,7 @@ clt_upstream_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 //	clt_req_destroy(r);
 
 #endif
+	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_ERROR);
 
 	return (EVHTP_RES_OK);
 }
@@ -234,6 +275,8 @@ clt_req_cb(evhtp_request_t *r, void *arg)
 
 	debug_printf("%s: %p: called\n", __func__, req);
 
+	/* XXX TODO: hook? */
+
 	evhtp_unset_all_hooks(&req->req->hooks);
 	req->req = NULL;
 	clt_req_destroy(req);
@@ -265,14 +308,18 @@ clt_req_create(struct client_req *req, const char *uri)
 		return (-1);
 	}
 
+	/* Force non-keepalive for now */
+	req->is_keepalive = 0;
+
 	/* Add headers */
 	evhtp_headers_add_header(req->req->headers_out,
 	    evhtp_header_new("Host", req->host, 0, 0));
 	evhtp_headers_add_header(req->req->headers_out,
 	    evhtp_header_new("User-Agent", "client", 0, 0));
-	/* XXX how do I mark the actual connection more keep-alive? */
-	evhtp_headers_add_header(req->req->headers_out,
-	    evhtp_header_new("Connection", "keep-alive", 0, 0));
+
+	if (req->is_keepalive)
+		evhtp_headers_add_header(req->req->headers_out,
+		    evhtp_header_new("Connection", "keep-alive", 0, 0));
 
 	/* Hooks */
 	evhtp_set_hook(&req->req->hooks, evhtp_hook_on_error,

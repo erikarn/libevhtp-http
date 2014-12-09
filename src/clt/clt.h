@@ -11,9 +11,11 @@ typedef enum {
 	CLT_NOTIFY_REQUEST_DONE_OK,
 	CLT_NOTIFY_REQUEST_DONE_ERROR,
 	CLT_NOTIFY_CLOSING,
+	CLT_NOTIFY_CONN_DESTROYING,
+	CLT_NOTIFY_REQ_DESTROYING,
 } clt_notify_cmd_t;
 
-typedef int clt_notify_cb(struct client_req *r, clt_notify_cmd_t what,
+typedef int clt_notify_cb(struct client_req *r, clt_notify_cmd_t ct,
     void *cbdata);
 
 /*
@@ -34,6 +36,9 @@ struct client_req {
 
 	/* Request URI */
 	char *uri;
+
+	/* Keepalive this request? */
+	int is_keepalive;
 
 	/*
 	 * How many requests to issue before this client
@@ -65,5 +70,6 @@ extern	struct client_req * clt_conn_create(struct clt_thr *thr,
 	    void *cbdata,
 	    const char *host, int port);
 extern	int clt_req_create(struct client_req *req, const char *uri);
+extern	const char * clt_notify_to_str(clt_notify_cmd_t ct);
 
 #endif

@@ -118,6 +118,7 @@ clt_req_destroy(struct client_req *req)
 {
 
 	debug_printf("%s: %p: called\n", __func__, req);
+
 	clt_call_notify(req, CLT_NOTIFY_REQ_DESTROYING);
 
 	if (req->req != NULL) {
@@ -131,6 +132,17 @@ clt_req_destroy(struct client_req *req)
 	if (req->uri)
 		free(req->uri);
 	req->uri = NULL;
+
+}
+
+static evhtp_res
+clt_upstream_conn_fini(evhtp_connection_t *conn, void *arg)
+{
+	struct client_req *r = arg;
+
+	debug_printf("%s: %p: called\n", __func__, r);
+
+	return (EVHTP_RES_OK);
 }
 
 static evhtp_res
@@ -138,7 +150,7 @@ clt_upstream_new_chunk(evhtp_request_t * upstream_req, uint64_t len, void * arg)
 {
 	struct client_req *r = arg;
 
-	debug_printf("%s: %p: called\n", __func__, r);
+	debug_printf("%s: %p: called; len=%lu\n", __func__, r, len);
 	return EVHTP_RES_OK;
 }
 
@@ -203,6 +215,8 @@ clt_upstream_fini(evhtp_request_t * upstream_req, void * arg)
 	struct client_req *r = arg;
 
 	debug_printf("%s: %p: called\n", __func__, r);
+
+	/* XXX TODO: notify */
 
 	/*
 	 * This is called by _evhtp_request_free();
@@ -320,6 +334,9 @@ clt_req_create(struct client_req *req, const char *uri)
 	if (req->is_keepalive)
 		evhtp_headers_add_header(req->req->headers_out,
 		    evhtp_header_new("Connection", "keep-alive", 0, 0));
+	else
+		evhtp_headers_add_header(req->req->headers_out,
+		    evhtp_header_new("Connection", "close", 0, 0));
 
 	/* Hooks */
 	evhtp_set_hook(&req->req->hooks, evhtp_hook_on_error,
@@ -332,6 +349,9 @@ clt_req_create(struct client_req *req, const char *uri)
 	    clt_upstream_chunk_done, req);
 	evhtp_set_hook(&req->req->hooks, evhtp_hook_on_chunks_complete,
 	    clt_upstream_chunks_done, req);
+
+	evhtp_set_hook(&req->con->hooks, evhtp_hook_on_connection_fini,
+	    clt_upstream_conn_fini, req);
 
 	/* Start request */
 	evhtp_make_request(req->con, req->req, htp_method_GET, req->uri);

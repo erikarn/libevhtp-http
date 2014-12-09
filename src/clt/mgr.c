@@ -13,6 +13,7 @@
 #include <sys/param.h>
 #include <sys/cpuset.h>
 #include <sys/socket.h>
+#include <sys/queue.h>
 
 #include <netinet/in.h>
 
@@ -24,6 +25,14 @@
 
 //#define	debug_printf(...)
 #define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
+
+static void
+clt_mgr_conn_start_http_req(struct clt_mgr_conn *c)
+{
+
+	//event_add(c->ev_new_http_req, NULL);
+	event_active(c->ev_new_http_req, 0, 0);
+}
 
 static int
 clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
@@ -37,6 +46,14 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 	    r,
 	    what,
 	    clt_notify_to_str(what));
+
+	/* Hack: just keep issuing requests */
+	/*
+	 * Note: we do this deferred so the rest of the destroy
+	 * path in clt.c can run and completely free the request.
+	 */
+//	if (what == CLT_NOTIFY_REQ_DESTROYING)
+//		clt_mgr_conn_start_http_req(c);
 
 	return (0);
 }
@@ -54,6 +71,42 @@ clt_mgr_setup(struct clt_mgr *m)
 	return (0);
 }
 
+/*
+ * Finish destroying a connection.
+ *
+ * This must be called via a deferred context so we aren't stuck in
+ * the middle of some stack context inside libevhtp/libevent.
+ */
+static void
+_clt_mgr_conn_destroy(struct clt_mgr_conn *c)
+{
+
+	/* Delete pending events */
+	event_del(c->ev_new_http_req);
+
+	/* Clean up the HTTP request state */
+	if (c->req)
+		clt_conn_destroy(c->req);
+
+	/* Free event */
+	event_free(c->ev_new_http_req);
+
+	/* Free connection */
+	free(c);
+}
+
+static void
+clt_mgr_conn_http_req_event(evutil_socket_t sock, short which,
+    void *arg)
+{
+	struct clt_mgr_conn *c = arg;
+
+	/* XXX TODO: If a HTTP request is pending, warn */
+
+	/* Issue a new HTTP request */
+	(void) clt_req_create(c->req, c->mgr->uri);
+}
+
 static struct clt_mgr_conn *
 clt_mgr_conn_create(struct clt_mgr *mgr)
 {
@@ -67,13 +120,15 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 	c->mgr = mgr;
 	c->req = clt_conn_create(mgr->thr, clt_mgr_conn_notify_cb,
 	    c, mgr->host, mgr->port);
+	c->ev_new_http_req = event_new(mgr->thr->t_evbase,
+	    -1,
+	    0,
+	    clt_mgr_conn_http_req_event,
+	    c);
 	if (c->req == NULL) {
 		fprintf(stderr, "%s: clt_conn_create: failed\n", __func__);
 		goto error;
 	}
-
-	/* Kick start a HTTP request */
-	(void) clt_req_create(c->req, mgr->uri);
 
 	return (c);
 
@@ -105,6 +160,8 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 		if (c == NULL)
 			continue;
 		m->nconn ++;
+		/* Kick start a HTTP request */
+		clt_mgr_conn_start_http_req(c);
 	}
 
 	debug_printf("%s: %p: called\n", __func__, m);
@@ -126,7 +183,7 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 
 	/* For now, open 8 connections right now */
 	/* Later this should be staggered via timer events */
-	m->target_nconn = 8;
+	m->target_nconn = 1;
 	m->burst_conn = 4;
 
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);

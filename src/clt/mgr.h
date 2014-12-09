@@ -32,6 +32,9 @@ struct clt_mgr_conn {
 
 	/* The actual connection/request */
 	struct client_req *req;
+
+	/* Schedule to issue a new HTTP request */
+	event_t *ev_new_http_req;
 };
 
 extern	int clt_mgr_config(struct clt_mgr *m, struct clt_thr *th,

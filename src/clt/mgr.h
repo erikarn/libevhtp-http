@@ -21,7 +21,11 @@ struct clt_mgr {
 
 	/* statistics */
 	uint64_t conn_count;
+
 	uint64_t req_count;
+	uint64_t req_count_ok;
+	uint64_t req_count_err;
+	uint64_t req_count_timeout;
 
 	/* Configuration for clients */
 	char *host;

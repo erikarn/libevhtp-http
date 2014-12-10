@@ -53,6 +53,14 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 	 * Note: we do this deferred so the rest of the destroy
 	 * path in clt.c can run and completely free the request.
 	 */
+	if (what == CLT_NOTIFY_REQUEST_DONE_OK) {
+		c->mgr->req_count_ok++;
+	} else if (what == CLT_NOTIFY_REQUEST_DONE_ERROR) {
+		c->mgr->req_count_err++;
+	} else if (what == CLT_NOTIFY_REQUEST_TIMEOUT) {
+		c->mgr->req_count_timeout++;
+	}
+
 	if (what == CLT_NOTIFY_REQ_DESTROYING) {
 		if (c->cur_req_count >= c->target_request_count) {
 			/* XXX TODO: close the connection down */
@@ -183,11 +191,14 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	}
 
 	debug_printf("%s: %p: called\n", __func__, m);
-	debug_printf("%s: nconn=%d, conn_count=%llu, req_count=%llu\n",
+	debug_printf("%s: nconn=%d, conn_count=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
 	    __func__,
 	    (int) m->nconn,
 	    (unsigned long long) m->conn_count,
-	    (unsigned long long) m->req_count);
+	    (unsigned long long) m->req_count,
+	    (unsigned long long) m->req_count_ok,
+	    (unsigned long long) m->req_count_err,
+	    (unsigned long long) m->req_count_timeout);
 	evtimer_add(m->t_timerev, &tv);
 }
 

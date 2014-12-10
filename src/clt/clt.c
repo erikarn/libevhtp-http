@@ -21,8 +21,8 @@
 #include "thr.h"
 #include "clt.h"
 
-#define	debug_printf(...)
-//#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
+//#define	debug_printf(...)
+#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
 const char *
 clt_notify_to_str(clt_notify_cmd_t ct)
@@ -42,8 +42,8 @@ clt_notify_to_str(clt_notify_cmd_t ct)
 		return "CLT_NOTIFY_REQUEST_DONE_ERROR";
 	case CLT_NOTIFY_REQUEST_TIMEOUT:
 		return "CLT_NOTIFY_REQUEST_TIMEOUT";
-	case CLT_NOTIFY_CLOSING:
-		return "CLT_NOTIFY_CLOSING";
+	case CLT_NOTIFY_CONN_CLOSING:
+		return "CLT_NOTIFY_CONN_CLOSING";
 	case CLT_NOTIFY_CONN_DESTROYING:
 		return "CLT_NOTIFY_CONN_DESTROYING";
 	case CLT_NOTIFY_REQ_DESTROYING:
@@ -70,7 +70,8 @@ void
 clt_conn_destroy(struct client_req *req)
 {
 
-	clt_call_notify(req, CLT_NOTIFY_CONN_DESTROYING);
+	/* No need to notify the caller; that'll likely be the thing we'd notify */
+	//clt_call_notify(req, CLT_NOTIFY_CONN_DESTROYING);
 
 	/* free the request; disconnect hooks */
 	if (req->req) {
@@ -113,12 +114,33 @@ clt_req_destroy(struct client_req *req)
 
 }
 
+/*
+ * The connection is going away; notify upper layers.
+ *
+ * TODO: does this mean any pending request is going away too
+ * TODO: does this mean the evhtp_connection is being freed
+ *       for us?
+ */
 static evhtp_res
 clt_upstream_conn_fini(evhtp_connection_t *conn, void *arg)
 {
 	struct client_req *r = arg;
 
 	debug_printf("%s: %p: called\n", __func__, r);
+
+	/*
+	 * XXX for now - assume evhtp is going away; so free any
+	 * pending HTTP request and connection.
+	 *
+	 * XXX and hm, we should really figure out how to /not/
+	 * count a submitted HTTP request on this connection, as
+	 * it just plainly won't work.
+	 */
+	evhtp_unset_all_hooks(&conn->hooks);
+	clt_call_notify(r, CLT_NOTIFY_CONN_CLOSING);
+
+	r->con = NULL;
+	r->req = NULL;
 
 	return (EVHTP_RES_OK);
 }
@@ -303,7 +325,15 @@ clt_req_create(struct client_req *req, const char *uri)
 		    req);
 		return (-1);
 	}
-	
+
+	/* Fail if the connection is closed */
+	if (req->con == NULL) {
+		fprintf(stderr, "%s: %p: called; conn is NULL\n",
+		    __func__,
+		    req);
+		return (-1);
+	}
+
 	req->uri = strdup(uri);
 	if (req->uri == NULL) {
 		warn("%s: strdup", __func__);
@@ -319,7 +349,7 @@ clt_req_create(struct client_req *req, const char *uri)
 	}
 
 	/* Force non-keepalive for now */
-	req->is_keepalive = 1;
+	req->is_keepalive = 0;
 
 	/* Add headers */
 	evhtp_headers_add_header(req->req->headers_out,

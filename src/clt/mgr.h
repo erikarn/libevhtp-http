@@ -34,6 +34,7 @@ struct clt_mgr {
 	char *host;
 	int port;
 	char *uri;
+	int wait_time_pre_http_req_msec;
 };
 
 /*
@@ -43,8 +44,14 @@ struct clt_mgr {
 struct clt_mgr_conn {
 	struct clt_mgr *mgr;
 
+	/* Is this shutting down? */
+	int is_dead;
+
 	/* how many requests to make */
 	int target_request_count;
+
+	/* how long to wait between each HTTP connection (in msec) */
+	int wait_time_pre_http_req_msec;
 
 	/* how many requests have been made thus far */
 	int cur_req_count;
@@ -54,6 +61,13 @@ struct clt_mgr_conn {
 
 	/* Schedule to issue a new HTTP request */
 	event_t *ev_new_http_req;
+
+	/* Shutdown/delete the current connection */
+	event_t *ev_conn_destroy;
+
+	/* Is a (new) queued HTTP request pending? */
+	/* (Ie, it hasn't yet been started; just queued */
+	int pending_http_req;
 };
 
 extern	int clt_mgr_config(struct clt_mgr *m, struct clt_thr *th,

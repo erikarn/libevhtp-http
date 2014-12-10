@@ -29,7 +29,6 @@
 static void
 clt_mgr_conn_start_http_req(struct clt_mgr_conn *c)
 {
-
 	//event_add(c->ev_new_http_req, NULL);
 	event_active(c->ev_new_http_req, 0, 0);
 }
@@ -40,21 +39,36 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 {
 	struct clt_mgr_conn *c = cbdata;
 
+#if 0
 	debug_printf("%s: %p: called, r=%p; what=%d (%s)\n",
 	    __func__,
 	    c,
 	    r,
 	    what,
 	    clt_notify_to_str(what));
+#endif
 
 	/* Hack: just keep issuing requests */
 	/*
 	 * Note: we do this deferred so the rest of the destroy
 	 * path in clt.c can run and completely free the request.
 	 */
-//	if (what == CLT_NOTIFY_REQ_DESTROYING)
-//		clt_mgr_conn_start_http_req(c);
+	if (what == CLT_NOTIFY_REQ_DESTROYING) {
+		if (c->cur_req_count > c->target_request_count) {
+			/* XXX TODO: close the connection down */
+			/* XXX for now; just idle */
+			goto finish;
+		}
+#if 0
+		debug_printf("%s: %p: num_count=%lld\n",
+		    __func__,
+		    c,
+		    (long long) c->cur_req_count);
+#endif
+		clt_mgr_conn_start_http_req(c);
+	}
 
+finish:
 	return (0);
 }
 
@@ -64,8 +78,8 @@ clt_mgr_setup(struct clt_mgr *m)
 	struct timeval tv;
 
 	/* Start things */
-	tv.tv_sec = 1;
-	tv.tv_usec = 0;
+	tv.tv_sec = 0;
+	tv.tv_usec = 10000;
 	evtimer_add(m->t_timerev, &tv);
 
 	return (0);
@@ -104,6 +118,8 @@ clt_mgr_conn_http_req_event(evutil_socket_t sock, short which,
 	/* XXX TODO: If a HTTP request is pending, warn */
 
 	/* Issue a new HTTP request */
+	c->cur_req_count ++;
+	c->mgr->req_count++;
 	(void) clt_req_create(c->req, c->mgr->uri);
 }
 
@@ -129,6 +145,7 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 		fprintf(stderr, "%s: clt_conn_create: failed\n", __func__);
 		goto error;
 	}
+	c->target_request_count = mgr->target_request_count;
 
 	return (c);
 
@@ -149,8 +166,8 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	struct timeval tv;
 	struct clt_mgr_conn *c;
 
-	tv.tv_sec = 1;
-	tv.tv_usec = 0;
+	tv.tv_sec = 0;
+	tv.tv_usec = 100000;
 
 	for (i = m->nconn, j = 0;
 	    (i < m->target_nconn &&
@@ -160,11 +177,17 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 		if (c == NULL)
 			continue;
 		m->nconn ++;
+		c->mgr->conn_count++;
 		/* Kick start a HTTP request */
 		clt_mgr_conn_start_http_req(c);
 	}
 
 	debug_printf("%s: %p: called\n", __func__, m);
+	debug_printf("%s: nconn=%d, conn_count=%llu, req_count=%llu\n",
+	    __func__,
+	    (int) m->nconn,
+	    (unsigned long long) m->conn_count,
+	    (unsigned long long) m->req_count);
 	evtimer_add(m->t_timerev, &tv);
 }
 
@@ -183,8 +206,10 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 
 	/* For now, open 8 connections right now */
 	/* Later this should be staggered via timer events */
-	m->target_nconn = 1;
-	m->burst_conn = 4;
+	m->target_nconn = 256;
+	m->burst_conn = 32;
+
+	m->target_request_count = 1024;
 
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);
 

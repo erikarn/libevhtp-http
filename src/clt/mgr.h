@@ -18,9 +18,16 @@ struct clt_mgr {
 
 	/* how many to attempt to open */
 	int target_nconn;
+
+	/* statistics */
+	uint64_t conn_count;
+	uint64_t req_count;
+
+	/* Configuration for clients */
 	char *host;
 	int port;
 	char *uri;
+	int target_request_count;
 };
 
 /*
@@ -29,6 +36,12 @@ struct clt_mgr {
  */
 struct clt_mgr_conn {
 	struct clt_mgr *mgr;
+
+	/* how many requests to make */
+	int target_request_count;
+
+	/* how many requests have been made thus far */
+	int cur_req_count;
 
 	/* The actual connection/request */
 	struct client_req *req;

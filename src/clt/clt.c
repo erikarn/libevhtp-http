@@ -21,8 +21,8 @@
 #include "thr.h"
 #include "clt.h"
 
-//#define	debug_printf(...)
-#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
+#define	debug_printf(...)
+//#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
 const char *
 clt_notify_to_str(clt_notify_cmd_t ct)
@@ -315,7 +315,7 @@ clt_req_cb(evhtp_request_t *r, void *arg)
 }
 
 int
-clt_req_create(struct client_req *req, const char *uri)
+clt_req_create(struct client_req *req, const char *uri, int keepalive)
 {
 
 	/* Only do this if there's no outstanding request */
@@ -349,7 +349,7 @@ clt_req_create(struct client_req *req, const char *uri)
 	}
 
 	/* Force non-keepalive for now */
-	req->is_keepalive = 0;
+	req->is_keepalive = keepalive;
 
 	/* Add headers */
 	evhtp_headers_add_header(req->req->headers_out,

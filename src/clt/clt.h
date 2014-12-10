@@ -70,7 +70,8 @@ extern	struct client_req * clt_conn_create(struct clt_thr *thr,
 	    clt_notify_cb *cb,
 	    void *cbdata,
 	    const char *host, int port);
-extern	int clt_req_create(struct client_req *req, const char *uri);
+extern	int clt_req_create(struct client_req *req, const char *uri,
+	    int keepalive);
 extern	const char * clt_notify_to_str(clt_notify_cmd_t ct);
 
 #endif

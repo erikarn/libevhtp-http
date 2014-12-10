@@ -19,6 +19,9 @@ struct clt_mgr {
 	/* how many to attempt to open */
 	int target_nconn;
 
+	/* how many requests each conn should run before finishing */
+	int target_request_count;
+
 	/* statistics */
 	uint64_t conn_count;
 
@@ -31,7 +34,6 @@ struct clt_mgr {
 	char *host;
 	int port;
 	char *uri;
-	int target_request_count;
 };
 
 /*

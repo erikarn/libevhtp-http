@@ -67,12 +67,6 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 			/* XXX for now; just idle */
 			goto finish;
 		}
-#if 0
-		debug_printf("%s: %p: num_count=%lld\n",
-		    __func__,
-		    c,
-		    (long long) c->cur_req_count);
-#endif
 		clt_mgr_conn_start_http_req(c);
 	}
 
@@ -87,7 +81,7 @@ clt_mgr_setup(struct clt_mgr *m)
 
 	/* Start things */
 	tv.tv_sec = 0;
-	tv.tv_usec = 10000;
+	tv.tv_usec = 100000;
 	evtimer_add(m->t_timerev, &tv);
 
 	return (0);
@@ -124,6 +118,9 @@ clt_mgr_conn_http_req_event(evutil_socket_t sock, short which,
 	struct clt_mgr_conn *c = arg;
 
 	/* XXX TODO: If a HTTP request is pending, warn */
+	if (c->req->req != NULL) {
+		printf("%s: %p: req in progress?\n", __func__, c);
+	}
 
 	/* Issue a new HTTP request */
 	c->cur_req_count ++;
@@ -160,6 +157,8 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 error:
 	if (c->req != NULL)
 		clt_conn_destroy(c->req);
+	if (c->ev_new_http_req != NULL)
+		event_free(c->ev_new_http_req);
 	if (c != NULL)
 		free(c);
 	return (NULL);
@@ -220,6 +219,7 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	m->target_nconn = 1024;
 	m->burst_conn = 128;
 
+	/* Maximum number of requests per connection */
 	m->target_request_count = 1024;
 
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);

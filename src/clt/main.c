@@ -46,7 +46,7 @@ main(int argc, const char *argv[])
 	}
 
 	/* Test configuration */
-	clt_mgr_config(m, th, "127.0.0.1", 8080, "/size");
+	clt_mgr_config(m, th, "10.11.2.2", 8080, "/size");
 
 	/* Initial connection setup */
 	clt_mgr_setup(m);

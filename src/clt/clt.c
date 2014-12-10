@@ -18,33 +18,11 @@
 
 #include <evhtp.h>
 
+#include "thr.h"
 #include "clt.h"
 
 #define	debug_printf(...)
 //#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
-
-struct clt_thr {
-	int t_tid;		/* thread id; local */
-	pthread_t t_thr;
-	evbase_t *t_evbase;
-	evhtp_t  *t_htp;
-	event_t  *t_timerev;
-
-	/*
-	 * For now this will be like apachebench - really quite stupid.
-	 * Later on we may wish to support some kind of module or
-	 * modules that implement a slight smarter testing policy.
-	 */
-
-	/* How many open connections */
-	int nconn;
-
-	/* how many to attempt to open */
-	int target_nconn;
-	char *host;
-	int port;
-	char *uri;
-};
 
 const char *
 clt_notify_to_str(clt_notify_cmd_t ct)
@@ -107,8 +85,6 @@ clt_conn_destroy(struct client_req *req)
 	if (req->uri)
 		free(req->uri);
 
-	/* XXX remove from connection list */
-	req->thr->nconn --;
 	free(req);
 }
 
@@ -286,9 +262,6 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
 		warn("%s: evhtp_connection_new", __func__);
 		goto error;
 	}
-
-	/* XXX TODO: add to connection list */
-	thr->nconn++;
 
 	return (r);
 

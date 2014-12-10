@@ -54,7 +54,7 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 	 * path in clt.c can run and completely free the request.
 	 */
 	if (what == CLT_NOTIFY_REQ_DESTROYING) {
-		if (c->cur_req_count > c->target_request_count) {
+		if (c->cur_req_count >= c->target_request_count) {
 			/* XXX TODO: close the connection down */
 			/* XXX for now; just idle */
 			goto finish;
@@ -206,8 +206,8 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 
 	/* For now, open 8 connections right now */
 	/* Later this should be staggered via timer events */
-	m->target_nconn = 256;
-	m->burst_conn = 32;
+	m->target_nconn = 1024;
+	m->burst_conn = 128;
 
 	m->target_request_count = 1024;
 

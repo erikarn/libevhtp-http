@@ -149,8 +149,18 @@ static evhtp_res
 clt_upstream_new_chunk(evhtp_request_t * upstream_req, uint64_t len, void * arg)
 {
 	struct client_req *r = arg;
+	struct evbuffer *ei;
 
 	debug_printf("%s: %p: called; len=%lu\n", __func__, r, len);
+	debug_printf("%s: %p: req->buffer_in len=%lu\n",
+	    __func__,
+	    r,
+	    evbuffer_get_length(r->req->buffer_in));
+	ei = bufferevent_get_input(r->req->conn->bev);
+	debug_printf("%s: %p: req->conn->buffer_in len=%lu\n",
+	    __func__,
+	    r,
+	    evbuffer_get_length(ei));
 	return EVHTP_RES_OK;
 }
 
@@ -158,8 +168,19 @@ evhtp_res
 clt_upstream_chunk_done(evhtp_request_t * upstream_req, void * arg)
 {
 	struct client_req *r = arg;
+	size_t len;
+
+	len = evbuffer_get_length(r->req->buffer_in);
 
 	debug_printf("%s: %p: called\n", __func__, r);
+	debug_printf("%s: %p: req->buffer_in len=%lu\n",
+	    __func__,
+	    r,
+	    len);
+
+	/* Here's where we consume the incoming data from the input buffer */
+	evbuffer_drain(r->req->buffer_in, len);
+
 	return EVHTP_RES_OK;
 }
 

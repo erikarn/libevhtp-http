@@ -117,9 +117,8 @@ clt_req_destroy(struct client_req *req)
 /*
  * The connection is going away; notify upper layers.
  *
- * TODO: does this mean any pending request is going away too
- * TODO: does this mean the evhtp_connection is being freed
- *       for us?
+ * This means the evhtp_connection is being freed by libevhtp.
+ * Any pending request on the con is also freed.
  */
 static evhtp_res
 clt_upstream_conn_fini(evhtp_connection_t *conn, void *arg)
@@ -137,10 +136,10 @@ clt_upstream_conn_fini(evhtp_connection_t *conn, void *arg)
 	 * it just plainly won't work.
 	 */
 	evhtp_unset_all_hooks(&conn->hooks);
-	clt_call_notify(r, CLT_NOTIFY_CONN_CLOSING);
-
 	r->con = NULL;
 	r->req = NULL;
+
+	clt_call_notify(r, CLT_NOTIFY_CONN_CLOSING);
 
 	return (EVHTP_RES_OK);
 }
@@ -285,15 +284,20 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
 		goto error;
 	}
 
+	evhtp_set_hook(&r->con->hooks, evhtp_hook_on_connection_fini,
+	    clt_upstream_conn_fini, r);
+
 	return (r);
 
 error:
-	if (r->host)
+	if (r && r->host)
 		free(r->host);
-	if (r->uri)
+	if (r && r->uri)
 		free(r->uri);
-	if (r->con)
+	if (r && r->con)
 		evhtp_connection_free(r->con);
+	if (r != NULL)
+		free(r);
 	return (NULL);
 }
 
@@ -375,9 +379,6 @@ clt_req_create(struct client_req *req, const char *uri, int keepalive)
 	    clt_upstream_chunk_done, req);
 	evhtp_set_hook(&req->req->hooks, evhtp_hook_on_chunks_complete,
 	    clt_upstream_chunks_done, req);
-
-	evhtp_set_hook(&req->con->hooks, evhtp_hook_on_connection_fini,
-	    clt_upstream_conn_fini, req);
 
 	/* Start request */
 	evhtp_make_request(req->con, req->req, htp_method_GET, req->uri);

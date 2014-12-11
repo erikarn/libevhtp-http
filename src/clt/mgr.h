@@ -30,6 +30,7 @@ struct clt_mgr {
 
 	/* statistics */
 	uint64_t conn_count;
+	uint64_t conn_closing_count;
 
 	uint64_t req_count;
 	uint64_t req_count_ok;

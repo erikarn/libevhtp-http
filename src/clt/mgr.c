@@ -166,6 +166,15 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 		 */
 		clt_mgr_conn_cancel_http_req(c);
 		clt_mgr_conn_destroy(c);
+
+		/*
+		 * XXX TODO:
+		 *
+		 * We don't know whether it was a failure to connect
+		 * or a failure after we've sent the HTTP request;
+		 * sigh.
+		 */
+		c->mgr->conn_closing_count ++;
 		return (0);
 	}
 
@@ -330,10 +339,11 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	}
 
 	debug_printf("%s: %p: called\n", __func__, m);
-	printf("%s: nconn=%d, conn_count=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
+	printf("%s: nconn=%d, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
 	    __func__,
 	    (int) m->nconn,
 	    (unsigned long long) m->conn_count,
+	    (unsigned long long) m->conn_closing_count,
 	    (unsigned long long) m->req_count,
 	    (unsigned long long) m->req_count_ok,
 	    (unsigned long long) m->req_count_err,
@@ -355,10 +365,10 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	m->uri = strdup(uri);
 
 	/* How many connections to keep open */
-	m->target_nconn = 2048;
+	m->target_nconn = 16384;
 
 	/* How many to try and open every 100ms */
-	m->burst_conn = 128;
+	m->burst_conn = 1024;
 
 	/* Maximum number of requests per connection; -1 for unlimited */
 	m->target_request_count = -1;

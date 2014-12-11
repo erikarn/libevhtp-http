@@ -22,12 +22,19 @@ struct clt_mgr {
 	/* how many requests each conn should run before finishing */
 	int target_request_count;
 
+	/* .. and a global limit */
+	int target_global_request_count;
+
+	/* how many connections should be run before finishing */
+	int target_total_nconn_count;
+
 	/* statistics */
 	uint64_t conn_count;
 
 	uint64_t req_count;
 	uint64_t req_count_ok;
 	uint64_t req_count_err;
+	uint64_t req_count_create_err;
 	uint64_t req_count_timeout;
 
 	/* Configuration for clients */
@@ -35,6 +42,7 @@ struct clt_mgr {
 	int port;
 	char *uri;
 	int wait_time_pre_http_req_msec;
+	int http_keepalive;
 };
 
 /*

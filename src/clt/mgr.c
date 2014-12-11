@@ -23,8 +23,8 @@
 #include "clt.h"
 #include "mgr.h"
 
-//#define	debug_printf(...)
-#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
+#define	debug_printf(...)
+//#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
 static int
 clt_mgr_conn_start_http_req(struct clt_mgr_conn *c, int msec)
@@ -68,6 +68,60 @@ clt_mgr_conn_destroy(struct clt_mgr_conn *c)
 	event_active(c->ev_conn_destroy, 0, 0);
 }
 
+/*
+ * Check if the connection is allowed to create another HTTP request.
+ *
+ * Returns 1 if we are, 0 otherwise.
+ */
+static int
+clt_mgr_conn_check_create_http_request(struct clt_mgr_conn *c)
+{
+	if (c->is_dead)
+		return (0);
+
+	if ((c->target_request_count > 0) &&
+	    (c->cur_req_count >= c->target_request_count))
+		return (0);
+
+	return (1);
+}
+
+/*
+ * Check if the connection manager has hit its limits and we're allowed
+ * to create a new HTTP request.
+ *
+ * Returns 1 if we are, 0 otherwise.
+ */
+static int
+clt_mgr_check_create_http_request(struct clt_mgr *mgr)
+{
+
+	if ((mgr->target_global_request_count > 0) &&
+	    mgr->req_count >= mgr->target_global_request_count)
+		return (0);
+
+	return (1);
+}
+
+/*
+ * Check if the connection manager has hit its limits and we're allowed
+ * to create a new connection.
+ *
+ * Return 1 if we are, 0 otherwise.
+ */
+static int
+clt_mgr_check_create_conn(struct clt_mgr *mgr)
+{
+
+	if ((mgr->target_total_nconn_count > 0) &&
+	    mgr->conn_count >= mgr->target_total_nconn_count)
+		return (0);
+	if (mgr->nconn >= mgr->target_nconn)
+		return (0);
+
+	return (1);
+}
+
 static int
 clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
     void *cbdata)
@@ -95,14 +149,15 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 	} else if (what == CLT_NOTIFY_REQUEST_TIMEOUT) {
 		c->mgr->req_count_timeout++;
 	} else if (what == CLT_NOTIFY_REQ_DESTROYING) {
-		if (c->cur_req_count >= c->target_request_count) {
-			/* XXX TODO: close the connection down */
-			/* XXX for now; just idle */
-			goto finish;
+		if (clt_mgr_conn_check_create_http_request(c) &&
+		    clt_mgr_check_create_http_request(c->mgr)) {
+			clt_mgr_conn_start_http_req(c,
+			    c->wait_time_pre_http_req_msec);
+		} else {
+			clt_mgr_conn_destroy(c);
+			/* Close connection */
 		}
-		if (c->is_dead == 1)
-			goto finish;
-		clt_mgr_conn_start_http_req(c, c->wait_time_pre_http_req_msec);
+		return (0);
 	} else if (what == CLT_NOTIFY_CONN_CLOSING) {
 		/* For now we tear down the owner client too */
 		/*
@@ -188,12 +243,13 @@ clt_mgr_conn_http_req_event(evutil_socket_t sock, short which, void *arg)
 
 	/* Issue a new HTTP request */
 	c->pending_http_req = 0;
-	if (clt_req_create(c->req, c->mgr->uri) < 0) {
+	if (clt_req_create(c->req, c->mgr->uri, c->mgr->http_keepalive) < 0) {
 		printf("%s: %p: failed to create HTTP connection\n",
 		    __func__,
 		    c);
 
 		/* XXX TODO should kick off some notification about this? */
+		c->mgr->req_count_create_err++;
 		return;
 	}
 
@@ -261,6 +317,9 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	    (i < m->target_nconn &&
 	    j <= m->burst_conn);
 	    i++, j++) {
+		/* break if we hit our global connection limit */
+		if (! clt_mgr_check_create_conn(m))
+			break;
 		c = clt_mgr_conn_create(m);
 		if (c == NULL)
 			continue;
@@ -271,7 +330,7 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	}
 
 	debug_printf("%s: %p: called\n", __func__, m);
-	debug_printf("%s: nconn=%d, conn_count=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
+	printf("%s: nconn=%d, conn_count=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
 	    __func__,
 	    (int) m->nconn,
 	    (unsigned long long) m->conn_count,
@@ -295,14 +354,26 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	m->port = port;
 	m->uri = strdup(uri);
 
-	/* For now, open 8 connections right now */
-	/* Later this should be staggered via timer events */
-	m->target_nconn = 1;
+	/* How many connections to keep open */
+	m->target_nconn = 2048;
+
+	/* How many to try and open every 100ms */
 	m->burst_conn = 128;
 
-	/* Maximum number of requests per connection */
-	m->target_request_count = 4;
+	/* Maximum number of requests per connection; -1 for unlimited */
+	m->target_request_count = -1;
+
+	/* Time to wait (msec) before issuing a HTTP request */
 	m->wait_time_pre_http_req_msec = 1000;
+
+	/* How many global connections to make, -1 for no limit */
+	m->target_total_nconn_count = -1;
+
+	/* How many global requests to make, -1 for no limit */
+	m->target_global_request_count = -1;
+
+	/* Keepalive? (global for now) */
+	m->http_keepalive = 1;
 
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);
 

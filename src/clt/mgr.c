@@ -184,6 +184,19 @@ clt_mgr_check_finished(struct clt_mgr *mgr)
 	return (1);
 }
 
+/*
+ * Check if the http clients are completed and no open connections
+ * exist.
+ */
+static int
+clt_mgr_check_waiting_finished(struct clt_mgr *mgr)
+{
+
+	if (mgr->nconn == 0)
+		return (1);
+	return (0);
+}
+
 static int
 clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
     void *cbdata)
@@ -373,6 +386,41 @@ error:
 }
 
 static void
+clt_mgr_waiting_schedule(struct clt_mgr *m)
+{
+	struct timeval tv;
+
+	tv.tv_sec = m->waiting_period_sec;
+	tv.tv_usec = 0;
+	evtimer_add(m->t_wait_timerev, &tv);
+}
+
+static void
+clt_mgr_waiting_deschedule(struct clt_mgr *m)
+{
+
+	evtimer_del(m->t_wait_timerev);
+}
+
+static void
+clt_mgr_cleanup_schedule(struct clt_mgr *m)
+{
+	struct timeval tv;
+
+	/* Short wait for cleanup */
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+	evtimer_add(m->t_cleanup_timerev, &tv);
+}
+
+static void
+clt_mgr_cleanup_deschedule(struct clt_mgr *m)
+{
+
+	evtimer_del(m->t_cleanup_timerev);
+}
+
+static void
 clt_mgr_timer_state_running(struct clt_mgr *m)
 {
 	int i, j;
@@ -402,14 +450,67 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 	 */
 	if (!  clt_mgr_check_finished(m)) {
 		clt_mgr_state_change(m, CLT_MGR_STATE_WAITING);
+		clt_mgr_waiting_schedule(m);
 	}
+}
+
+static void
+clt_mgr_waiting_timer(evutil_socket_t sock, short which, void *arg)
+{
+	struct clt_mgr *m = arg;
+
+	printf("%s: called\n", __func__);
+	if (m->mgr_state != CLT_MGR_STATE_WAITING) {
+		printf("%s: unexpected state? (%s)\n",
+		    __func__,
+		    clt_mgr_state_str(m->mgr_state));
+		return;
+	}
+
+	/* Bump to CLEANUP phase */
+	clt_mgr_state_change(m, CLT_MGR_STATE_CLEANUP);
+	clt_mgr_cleanup_schedule(m);
 }
 
 static void
 clt_mgr_timer_state_waiting(struct clt_mgr *m)
 {
 
-	/* For now - no-op */
+	if (! clt_mgr_check_waiting_finished(m))
+		return;
+
+	if (m->mgr_state != CLT_MGR_STATE_WAITING) {
+		printf("%s: unexpected state? (%s)\n",
+		    __func__,
+		    clt_mgr_state_str(m->mgr_state));
+		return;
+	}
+
+	/* Bump to CLEANUP phase */
+	clt_mgr_state_change(m, CLT_MGR_STATE_CLEANUP);
+	clt_mgr_cleanup_schedule(m);
+}
+
+static void
+clt_mgr_cleanup_timer(evutil_socket_t sock, short which, void *arg)
+{
+	struct clt_mgr *m = arg;
+
+	printf("%s: called\n", __func__);
+
+	if (m->mgr_state != CLT_MGR_STATE_CLEANUP) {
+		printf("%s: unexpected state? (%s)\n",
+		    __func__,
+		    clt_mgr_state_str(m->mgr_state));
+		return;
+	}
+
+	/* Walk the list of open http connections, forcibly them */
+	/* XXX TODO: we don't maintain this as a list! */
+
+	/* Bump to COMPLETED phase; we're done. */
+	clt_mgr_state_change(m, CLT_MGR_STATE_COMPLETED);
+	evtimer_del(m->t_timerev);
 }
 
 static void
@@ -425,6 +526,9 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 		break;
 	case CLT_MGR_STATE_WAITING:
 		clt_mgr_timer_state_waiting(m);
+		break;
+	case CLT_MGR_STATE_CLEANUP:
+	case CLT_MGR_STATE_COMPLETED:
 		break;
 	default:
 		/* XXX this shouldn't happen! */
@@ -482,10 +586,18 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	/* Keepalive? (global for now) */
 	m->http_keepalive = 1;
 
+	/*
+	 * How long to wait around during WAITING for connections
+	 * to finish and close
+	 */
+	m->waiting_period_sec = 10;
+
 	/* Bump to running */
 	clt_mgr_state_change(m, CLT_MGR_STATE_RUNNING);
 
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);
+	m->t_wait_timerev = evtimer_new(th->t_evbase, clt_mgr_waiting_timer, m);
+	m->t_cleanup_timerev = evtimer_new(th->t_evbase, clt_mgr_cleanup_timer, m);
 
 	return (0);
 }

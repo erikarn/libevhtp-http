@@ -21,6 +21,12 @@ struct clt_mgr {
 	/* Periodic event */
 	event_t  *t_timerev;
 
+	/* WAITING timer event */
+	event_t *t_wait_timerev;
+
+	/* CLEANUP timer event */
+	event_t *t_cleanup_timerev;
+
 	/* How many open connections */
 	int nconn;
 
@@ -38,6 +44,13 @@ struct clt_mgr {
 
 	/* how many connections should be run before finishing */
 	int target_total_nconn_count;
+
+	/* WAITING phase configuration */
+	/*
+	 * How long to wait for connections to complete
+	 * before moving to CLEANUP.
+	 */
+	int waiting_period_sec;
 
 	/* statistics */
 	uint64_t conn_count;

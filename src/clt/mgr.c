@@ -171,12 +171,9 @@ clt_mgr_check_finished(struct clt_mgr *mgr)
 {
 
 	/* XXX TODO: need a timeout based config option */
+	/* XXX TODO: need a connection based config option */
 
-	/* number of connections */
-	/*
-	 * XXX should we use req_count or something else
-	 * that tracks completed connections?
-	 */
+	/* number of total requests */
 	if ((mgr->target_global_request_count > 0) &&
 	    mgr->req_count >= mgr->target_global_request_count)
 		return (0);
@@ -257,19 +254,6 @@ finish:
 	return (0);
 }
 
-int
-clt_mgr_setup(struct clt_mgr *m)
-{
-	struct timeval tv;
-
-	/* Start things */
-	tv.tv_sec = 0;
-	tv.tv_usec = 100000;
-	evtimer_add(m->t_timerev, &tv);
-
-	return (0);
-}
-
 /*
  * Finish destroying a connection.
  *
@@ -293,9 +277,10 @@ _clt_mgr_conn_destroy(struct clt_mgr_conn *c)
 	event_free(c->ev_conn_destroy);
 
 	/* Parent count */
+	/* XXX call back to owner instead? */
 	c->mgr->nconn --;
+	TAILQ_REMOVE(&c->mgr->mgr_conn_list, c, node);
 
-	/* XXX call back to owner? */
 
 	/* Free connection */
 	free(c);
@@ -370,6 +355,8 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 	}
 	c->target_request_count = mgr->target_request_count;
 	c->wait_time_pre_http_req_msec = mgr->wait_time_pre_http_req_msec;
+
+	TAILQ_INSERT_TAIL(&mgr->mgr_conn_list, c, node);
 
 	return (c);
 
@@ -488,6 +475,7 @@ clt_mgr_timer_state_waiting(struct clt_mgr *m)
 
 	/* Bump to CLEANUP phase */
 	clt_mgr_state_change(m, CLT_MGR_STATE_CLEANUP);
+	clt_mgr_waiting_deschedule(m);
 	clt_mgr_cleanup_schedule(m);
 }
 
@@ -510,6 +498,9 @@ clt_mgr_cleanup_timer(evutil_socket_t sock, short which, void *arg)
 
 	/* Bump to COMPLETED phase; we're done. */
 	clt_mgr_state_change(m, CLT_MGR_STATE_COMPLETED);
+
+	/* Deleting the final timer causes the event loop to exit */
+	/* We shouldn't rely on this specific behaviour though! */
 	evtimer_del(m->t_timerev);
 }
 
@@ -553,12 +544,10 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 }
 
 int
-clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
+clt_mgr_config(struct clt_mgr *m, const char *host,
     int port, const char *uri)
 {
 	struct timeval tv;
-
-	m->thr = th;
 
 	/* XXX TODO: error chceking */
 	m->host = strdup(host);
@@ -566,7 +555,7 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	m->uri = strdup(uri);
 
 	/* How many connections to keep open */
-	m->target_nconn = 128;
+	m->target_nconn = 16384;
 
 	/* How many to try and open every 100ms */
 	m->burst_conn = 1024;
@@ -581,7 +570,7 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	m->target_total_nconn_count = -1;
 
 	/* How many global requests to make, -1 for no limit */
-	m->target_global_request_count = 10240;
+	m->target_global_request_count = 20480;
 
 	/* Keepalive? (global for now) */
 	m->http_keepalive = 1;
@@ -592,8 +581,16 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	 */
 	m->waiting_period_sec = 10;
 
-	/* Bump to running */
-	clt_mgr_state_change(m, CLT_MGR_STATE_RUNNING);
+	return (0);
+}
+
+int
+clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th)
+{
+	m->thr = th;
+
+	/* Tracking list! */
+	TAILQ_INIT(&m->mgr_conn_list);
 
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);
 	m->t_wait_timerev = evtimer_new(th->t_evbase, clt_mgr_waiting_timer, m);
@@ -601,4 +598,21 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 
 	return (0);
 }
+
+int
+clt_mgr_start(struct clt_mgr *m)
+{
+	struct timeval tv;
+
+	/* Bump to running */
+	clt_mgr_state_change(m, CLT_MGR_STATE_RUNNING);
+
+	/* Start things */
+	tv.tv_sec = 0;
+	tv.tv_usec = 100000;
+	evtimer_add(m->t_timerev, &tv);
+
+	return (0);
+}
+
 

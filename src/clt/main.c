@@ -45,11 +45,14 @@ main(int argc, const char *argv[])
 		err(127, "%s: calloc", __func__);
 	}
 
-	/* Test configuration */
-	clt_mgr_config(m, th, "10.11.2.2", 8080, "/size");
-
 	/* Initial connection setup */
-	clt_mgr_setup(m);
+	clt_mgr_setup(m, th);
+
+	/* Test configuration */
+	clt_mgr_config(m, "10.11.2.2", 8080, "/size");
+
+	/* Kick things off */
+	clt_mgr_start(m);
 
 	/* Begin! */
 	event_base_loop(th->t_evbase, 0);

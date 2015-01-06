@@ -10,13 +10,19 @@ typedef enum {
 	CLT_MGR_STATE_COMPLETED
 } clt_mgr_state_t;
 
+struct clt_mgr_conn;
+
 /*
  * This is the instance of a client manager.
  */
 struct clt_mgr {
 	struct clt_thr *thr;
 
+	/* Current state */
 	clt_mgr_state_t mgr_state;
+
+	/* List of http connection s*/
+	TAILQ_HEAD(, clt_mgr_conn) mgr_conn_list;
 
 	/* Periodic event */
 	event_t  *t_timerev;
@@ -77,6 +83,9 @@ struct clt_mgr {
 struct clt_mgr_conn {
 	struct clt_mgr *mgr;
 
+	/* Entry on the manager list */
+	TAILQ_ENTRY(clt_mgr_conn) node;
+
 	/* Is this shutting down? */
 	int is_dead;
 
@@ -103,8 +112,9 @@ struct clt_mgr_conn {
 	int pending_http_req;
 };
 
-extern	int clt_mgr_config(struct clt_mgr *m, struct clt_thr *th,
-	    const char *host, int port, const char *uri);
-extern	int clt_mgr_setup(struct clt_mgr *m);
+extern	int clt_mgr_config(struct clt_mgr *m, const char *host,
+	    int port, const char *uri);
+extern	int clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th);
+extern	int clt_mgr_start(struct clt_mgr *m);
 
 #endif	/* __MGR_H__ */

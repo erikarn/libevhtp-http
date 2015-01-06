@@ -171,14 +171,16 @@ clt_mgr_check_finished(struct clt_mgr *mgr)
 {
 
 	/* XXX TODO: need a timeout based config option */
-	/* XXX TODO: need a connection based config option */
 
 	/* number of total requests */
 	if ((mgr->target_global_request_count > 0) &&
 	    mgr->req_count >= mgr->target_global_request_count)
-		return (0);
+		return (1);
+	if ((mgr->target_total_nconn_count > 0) &&
+	    mgr->conn_count >= mgr->target_total_nconn_count)
+		return (1);
 
-	return (1);
+	return (0);
 }
 
 /*
@@ -435,7 +437,7 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 	 * WAITING - we'll wait until there are no more
 	 * connections active, then we'll cleanup.
 	 */
-	if (!  clt_mgr_check_finished(m)) {
+	if (clt_mgr_check_finished(m)) {
 		clt_mgr_state_change(m, CLT_MGR_STATE_WAITING);
 		clt_mgr_waiting_schedule(m);
 	}

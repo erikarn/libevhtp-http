@@ -1,11 +1,22 @@
 #ifndef	__MGR_H__
 #define	__MGR_H__
 
+typedef enum {
+	CLT_MGR_STATE_NONE,
+	CLT_MGR_STATE_INIT,
+	CLT_MGR_STATE_RUNNING,
+	CLT_MGR_STATE_WAITING,
+	CLT_MGR_STATE_CLEANUP,
+	CLT_MGR_STATE_COMPLETED
+} clt_mgr_state_t;
+
 /*
  * This is the instance of a client manager.
  */
 struct clt_mgr {
 	struct clt_thr *thr;
+
+	clt_mgr_state_t mgr_state;
 
 	/* Periodic event */
 	event_t  *t_timerev;

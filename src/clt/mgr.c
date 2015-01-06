@@ -26,6 +26,42 @@
 #define	debug_printf(...)
 //#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
+static const char *
+clt_mgr_state_str(clt_mgr_state_t state)
+{
+
+	switch (state) {
+	case CLT_MGR_STATE_NONE:
+		return "NONE";
+	case CLT_MGR_STATE_INIT:
+		return "INIT";
+	case CLT_MGR_STATE_RUNNING:
+		return "RUNNING";
+	case CLT_MGR_STATE_WAITING:
+		return "WAITING";
+	case CLT_MGR_STATE_CLEANUP:
+		return "CLEANUP";
+	case CLT_MGR_STATE_COMPLETED:
+		return "COMPLETED";
+	default:
+		return "<unknown>";
+	}
+}
+
+static void
+clt_mgr_state_change(struct clt_mgr *mgr, clt_mgr_state_t new_state)
+{
+
+	printf("%s: changing state from %s to %s\n",
+	    __func__,
+	    clt_mgr_state_str(mgr->mgr_state),
+	    clt_mgr_state_str(new_state));
+
+	/* XXX call callback */
+
+	mgr->mgr_state = new_state;
+}
+
 static int
 clt_mgr_conn_start_http_req(struct clt_mgr_conn *c, int msec)
 {
@@ -117,6 +153,32 @@ clt_mgr_check_create_conn(struct clt_mgr *mgr)
 	    mgr->conn_count >= mgr->target_total_nconn_count)
 		return (0);
 	if (mgr->nconn >= mgr->target_nconn)
+		return (0);
+
+	return (1);
+}
+
+/*
+ * Check if the connection manager has reached its target run phase
+ * and should finish issuing new requests and migrate to WAITING
+ * phase (to wait for existing clients to clean up.)
+ *
+ * This will eventually implement both a timeout based and max
+ * connection based check.
+ */
+static int
+clt_mgr_check_finished(struct clt_mgr *mgr)
+{
+
+	/* XXX TODO: need a timeout based config option */
+
+	/* number of connections */
+	/*
+	 * XXX should we use req_count or something else
+	 * that tracks completed connections?
+	 */
+	if ((mgr->target_global_request_count > 0) &&
+	    mgr->req_count >= mgr->target_global_request_count)
 		return (0);
 
 	return (1);
@@ -311,16 +373,11 @@ error:
 }
 
 static void
-clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
+clt_mgr_timer_state_running(struct clt_mgr *m)
 {
 	int i, j;
-	struct clt_mgr *m = arg;
 	struct clt_thr *th = m->thr;
-	struct timeval tv;
 	struct clt_mgr_conn *c;
-
-	tv.tv_sec = 0;
-	tv.tv_usec = 100000;
 
 	for (i = m->nconn, j = 0;
 	    (i < m->target_nconn &&
@@ -338,7 +395,44 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 		clt_mgr_conn_start_http_req(c, c->wait_time_pre_http_req_msec);
 	}
 
-	debug_printf("%s: %p: called\n", __func__, m);
+	/*
+	 * If we hit our limit then transition to
+	 * WAITING - we'll wait until there are no more
+	 * connections active, then we'll cleanup.
+	 */
+	if (!  clt_mgr_check_finished(m)) {
+		clt_mgr_state_change(m, CLT_MGR_STATE_WAITING);
+	}
+}
+
+static void
+clt_mgr_timer_state_waiting(struct clt_mgr *m)
+{
+
+	/* For now - no-op */
+}
+
+static void
+clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
+{
+	int i, j;
+	struct clt_mgr *m = arg;
+	struct timeval tv;
+
+	switch (m->mgr_state) {
+	case CLT_MGR_STATE_RUNNING:
+		clt_mgr_timer_state_running(m);
+		break;
+	case CLT_MGR_STATE_WAITING:
+		clt_mgr_timer_state_waiting(m);
+		break;
+	default:
+		/* XXX this shouldn't happen! */
+		printf("%s: not in a valid state yet (%s)\n",
+		    __func__,
+		    clt_mgr_state_str(m->mgr_state));
+	}
+
 	printf("%s: nconn=%d, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
 	    __func__,
 	    (int) m->nconn,
@@ -348,6 +442,9 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	    (unsigned long long) m->req_count_ok,
 	    (unsigned long long) m->req_count_err,
 	    (unsigned long long) m->req_count_timeout);
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 100000;
 	evtimer_add(m->t_timerev, &tv);
 }
 
@@ -365,7 +462,7 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	m->uri = strdup(uri);
 
 	/* How many connections to keep open */
-	m->target_nconn = 16384;
+	m->target_nconn = 128;
 
 	/* How many to try and open every 100ms */
 	m->burst_conn = 1024;
@@ -374,16 +471,19 @@ clt_mgr_config(struct clt_mgr *m, struct clt_thr *th, const char *host,
 	m->target_request_count = -1;
 
 	/* Time to wait (msec) before issuing a HTTP request */
-	m->wait_time_pre_http_req_msec = 1000;
+	m->wait_time_pre_http_req_msec = 1;
 
 	/* How many global connections to make, -1 for no limit */
 	m->target_total_nconn_count = -1;
 
 	/* How many global requests to make, -1 for no limit */
-	m->target_global_request_count = -1;
+	m->target_global_request_count = 10240;
 
 	/* Keepalive? (global for now) */
 	m->http_keepalive = 1;
+
+	/* Bump to running */
+	clt_mgr_state_change(m, CLT_MGR_STATE_RUNNING);
 
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);
 

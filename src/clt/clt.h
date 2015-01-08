@@ -17,6 +17,7 @@ typedef enum {
 } clt_notify_cmd_t;
 
 typedef int clt_notify_cb(struct client_req *r, clt_notify_cmd_t ct,
+    int data,
     void *cbdata);
 
 /*

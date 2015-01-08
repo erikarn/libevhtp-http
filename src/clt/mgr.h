@@ -52,6 +52,10 @@ struct clt_mgr {
 	uint64_t req_count_err;
 	uint64_t req_count_create_err;
 	uint64_t req_count_timeout;
+
+	uint64_t req_statustype_200;
+	uint64_t req_statustype_302;
+	uint64_t req_statustype_other;
 };
 
 /*

@@ -65,6 +65,23 @@ clt_mgr_state_change(struct clt_mgr *mgr, clt_mgr_state_t new_state)
 	mgr->mgr_state = new_state;
 }
 
+static void
+mgr_statustype_update(struct clt_mgr *mgr, int status)
+{
+
+	switch (status) {
+	case 200:
+		mgr->req_statustype_200++;
+		break;
+	case 302:
+		mgr->req_statustype_302++;
+		break;
+	default:
+		mgr->req_statustype_other++;
+		break;
+	}
+}
+
 static int
 clt_mgr_conn_start_http_req(struct clt_mgr_conn *c, int msec)
 {
@@ -206,7 +223,7 @@ clt_mgr_check_waiting_finished(struct clt_mgr *mgr)
 
 static int
 clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
-    void *cbdata)
+    int data, void *cbdata)
 {
 	struct clt_mgr_conn *c = cbdata;
 
@@ -226,6 +243,7 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 	 */
 	if (what == CLT_NOTIFY_REQUEST_DONE_OK) {
 		c->mgr->req_count_ok++;
+		mgr_statustype_update(c->mgr, data);
 	} else if (what == CLT_NOTIFY_REQUEST_DONE_ERROR) {
 		c->mgr->req_count_err++;
 	} else if (what == CLT_NOTIFY_REQUEST_TIMEOUT) {
@@ -602,6 +620,11 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	    (unsigned long long) m->req_count_ok,
 	    (unsigned long long) m->req_count_err,
 	    (unsigned long long) m->req_count_timeout);
+	printf("%s: 200_OK: %llu, 302: %llu, Other: %llu\n",
+	    __func__,
+	    (unsigned long long) m->req_statustype_200,
+	    (unsigned long long) m->req_statustype_302,
+	    (unsigned long long) m->req_statustype_other);
 
 	/* Nope, don't add the timer again if we've hit COMPLETED */
 	if (m->mgr_state == CLT_MGR_STATE_COMPLETED)

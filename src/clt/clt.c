@@ -53,11 +53,11 @@ clt_notify_to_str(clt_notify_cmd_t ct)
 }
 
 static void
-clt_call_notify(struct client_req *req, clt_notify_cmd_t ct)
+clt_call_notify(struct client_req *req, clt_notify_cmd_t ct, int data)
 {
 
 	if (req->cb.cb != NULL)
-		req->cb.cb(req, ct, req->cb.cbdata);
+		req->cb.cb(req, ct, data, req->cb.cbdata);
 }
 
 /*
@@ -97,7 +97,7 @@ clt_req_destroy(struct client_req *req)
 
 	debug_printf("%s: %p: called\n", __func__, req);
 
-	clt_call_notify(req, CLT_NOTIFY_REQ_DESTROYING);
+	clt_call_notify(req, CLT_NOTIFY_REQ_DESTROYING, 0);
 
 	if (req->req != NULL) {
 		/* free the request; disconnect hooks */
@@ -138,7 +138,7 @@ clt_upstream_conn_fini(evhtp_connection_t *conn, void *arg)
 	r->con = NULL;
 	r->req = NULL;
 
-	clt_call_notify(r, CLT_NOTIFY_CONN_CLOSING);
+	clt_call_notify(r, CLT_NOTIFY_CONN_CLOSING, 0);
 
 	return (EVHTP_RES_OK);
 }
@@ -188,7 +188,8 @@ clt_upstream_chunks_done(evhtp_request_t * upstream_req, void * arg)
 	struct client_req *r = arg;
 
 	debug_printf("%s: %p: called\n", __func__, r);
-	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_OK);
+	/* XXX is this ok here? What if we get 200 OK but we don't get the full response? */
+	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_OK, upstream_req->status);
 
 	return (EVHTP_RES_OK);
 }
@@ -212,8 +213,22 @@ clt_upstream_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	 * is freed.
 	 */
 
-	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_ERROR);
+	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_ERROR, 0);
 
+	return (EVHTP_RES_OK);
+}
+
+static evhtp_res
+clt_upstream_headers_start(evhtp_request_t * upstream_req, void *arg)
+{
+	struct client_req *r = arg;
+
+	/*
+	 * XXX TODO: Do the initial book-keeping on response type;
+	 * return it upon error/OK
+	 */
+	debug_printf("%s: %p: status=%d\n", __func__,
+	    r, upstream_req->status);
 	return (EVHTP_RES_OK);
 }
 
@@ -370,6 +385,8 @@ clt_req_create(struct client_req *req, const char *uri, int keepalive)
 	    clt_upstream_chunk_done, req);
 	evhtp_set_hook(&req->req->hooks, evhtp_hook_on_chunks_complete,
 	    clt_upstream_chunks_done, req);
+	evhtp_set_hook(&req->req->hooks, evhtp_hook_on_headers_start,
+	    clt_upstream_headers_start, req);
 
 	/* Start request */
 	evhtp_make_request(req->con, req->req, htp_method_GET, req->uri);

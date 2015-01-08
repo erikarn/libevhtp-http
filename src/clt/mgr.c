@@ -151,6 +151,11 @@ static int
 clt_mgr_check_create_conn(struct clt_mgr *mgr)
 {
 
+	/* Only create connections in INIT/WAITING phases */
+
+	if (mgr->mgr_state != CLT_MGR_STATE_RUNNING &&
+	    mgr->mgr_state != CLT_MGR_STATE_INIT)
+		return(0);
 	if ((mgr->target_total_nconn_count > 0) &&
 	    mgr->conn_count >= mgr->target_total_nconn_count)
 		return (0);
@@ -606,6 +611,13 @@ clt_mgr_config(struct clt_mgr *m, const char *host,
 
 	/* Keepalive? (global for now) */
 	m->http_keepalive = 1;
+
+	/*
+	 * How long to run the test for in RUNNING, before
+	 * we transition to WAITING regardless, or -1 for
+	 * no time based limit.
+	 */
+	m->running_period_sec = -1;
 
 	/*
 	 * How long to wait around during WAITING for connections

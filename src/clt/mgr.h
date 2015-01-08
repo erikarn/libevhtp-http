@@ -52,6 +52,9 @@ struct clt_mgr {
 	/* how many connections should be run before finishing */
 	int target_total_nconn_count;
 
+	/* How long to run for in RUNNING before finishing */
+	int running_period_sec;
+
 	/* WAITING phase configuration */
 	/*
 	 * How long to wait for connections to complete

@@ -389,10 +389,18 @@ thr_setup(struct thr *th, int tid)
 }
 #endif
 
+void
+sighdl_pipe(int s)
+{
+}
+
+
 int
 main(int argc, char ** argv) {
     evbase_t * evbase = event_base_new();
     evhtp_t  * htp    = evhtp_new(evbase, NULL);
+
+    signal(SIGPIPE, sighdl_pipe);
 
     evhtp_set_cb(htp, "/line", linecb, NULL);
     evhtp_set_cb(htp, "/size", sizecb, NULL);

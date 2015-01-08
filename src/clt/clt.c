@@ -319,9 +319,9 @@ clt_req_cb(evhtp_request_t *r, void *arg)
 
 	/* XXX TODO: hook? */
 
-	evhtp_unset_all_hooks(&req->req->hooks);
-	req->req = NULL;
-	clt_req_destroy(req);
+//	evhtp_unset_all_hooks(&req->req->hooks);
+//	req->req = NULL;
+//	clt_req_destroy(req);
 }
 
 int

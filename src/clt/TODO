@@ -1,0 +1,7 @@
+* Separate out "connect" errors from "socket closed before response" errors
+* create a once-per-second timer for printing out periodic statistics
+* add tracking for connect time, request send time, response htime, etc.
+* .. maybe something to validate response bodies? (ie, no
+  corruption by some proxy in the middle?)
+
+

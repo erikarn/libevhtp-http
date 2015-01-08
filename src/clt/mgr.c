@@ -417,6 +417,28 @@ clt_mgr_cleanup_deschedule(struct clt_mgr *m)
 }
 
 static void
+clt_mgr_state_set_waiting(struct clt_mgr *m)
+{
+
+	clt_mgr_state_change(m, CLT_MGR_STATE_WAITING);
+	clt_mgr_waiting_schedule(m);
+	evtimer_del(m->t_running_timerev);
+}
+
+static void
+clt_mgr_set_running_timer(struct clt_mgr *m)
+{
+	struct timeval tv;
+	if (m->running_period_sec < 0)
+		return;
+
+	tv.tv_sec = m->running_period_sec;
+	tv.tv_usec = 0;
+	evtimer_add(m->t_running_timerev, &tv);
+
+}
+
+static void
 clt_mgr_timer_state_running(struct clt_mgr *m)
 {
 	int i, j;
@@ -445,8 +467,7 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 	 * connections active, then we'll cleanup.
 	 */
 	if (clt_mgr_check_finished(m)) {
-		clt_mgr_state_change(m, CLT_MGR_STATE_WAITING);
-		clt_mgr_waiting_schedule(m);
+		clt_mgr_state_set_waiting(m);
 	}
 }
 
@@ -534,6 +555,16 @@ clt_mgr_cleanup_timer(evutil_socket_t sock, short which, void *arg)
 }
 
 static void
+clt_mgr_running_timer(evutil_socket_t sock, short which, void *arg)
+{
+	struct clt_mgr *m = arg;
+
+	/* Timer has fired; so time to force a state to WAITING */
+	clt_mgr_state_set_waiting(m);
+}
+
+
+static void
 clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 {
 	int i, j;
@@ -617,7 +648,7 @@ clt_mgr_config(struct clt_mgr *m, const char *host,
 	 * we transition to WAITING regardless, or -1 for
 	 * no time based limit.
 	 */
-	m->running_period_sec = -1;
+	m->running_period_sec = 3;
 
 	/*
 	 * How long to wait around during WAITING for connections
@@ -639,6 +670,7 @@ clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th)
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);
 	m->t_wait_timerev = evtimer_new(th->t_evbase, clt_mgr_waiting_timer, m);
 	m->t_cleanup_timerev = evtimer_new(th->t_evbase, clt_mgr_cleanup_timer, m);
+	m->t_running_timerev = evtimer_new(th->t_evbase, clt_mgr_running_timer, m);
 
 	return (0);
 }
@@ -647,6 +679,9 @@ int
 clt_mgr_start(struct clt_mgr *m)
 {
 	struct timeval tv;
+
+	/* Set running timer */
+	clt_mgr_set_running_timer(m);
 
 	/* Bump to running */
 	clt_mgr_state_change(m, CLT_MGR_STATE_RUNNING);

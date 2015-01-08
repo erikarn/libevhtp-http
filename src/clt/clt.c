@@ -212,14 +212,6 @@ clt_upstream_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	 * is freed.
 	 */
 
-#if 0
-	/* Clear hooks */
-//	evhtp_unset_all_hooks(&req->hooks);
-
-	/* Destroy the request */
-//	clt_req_destroy(r);
-
-#endif
 	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_ERROR);
 
 	return (EVHTP_RES_OK);

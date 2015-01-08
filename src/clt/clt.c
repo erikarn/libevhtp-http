@@ -72,14 +72,49 @@ clt_conn_destroy(struct client_req *req)
 	/* No need to notify the caller; that'll likely be the thing we'd notify */
 	//clt_call_notify(req, CLT_NOTIFY_CONN_DESTROYING);
 
+	/*
+	 * if there's a request pending on the connection,
+	 * then evhtp_connection_free() frees it for us.
+	 *
+	 * But if we're highly unlucky, we'll free the
+	 * request first, but req->con doesn't know
+	 * we've done it, and it'll double-free the
+	 * request.
+	 *
+	 * I don't see any code in libevhtp that
+	 * clears con->request for us when the request
+	 * is freed, leading to what I'm guessing are
+	 * some double-free situations.
+	 */
+
 	/* free the request; disconnect hooks */
 	if (req->req) {
 		evhtp_unset_all_hooks(&req->req->hooks);
+	}
+
+	/*
+	 * So to work around the potential double-free,
+	 * assume if we have a con then when we
+	 * free it, it'll free the request and
+	 * we don't have to.
+	 */
+	if (req->con) {
+		if (req->req != NULL && req->req != req->con->request) {
+			printf("%s: different req (%p != %p)\n",
+			    __func__,
+			    req->req,
+			    req->con->request);
+			/* it's a different request? Hm */
+			evhtp_request_free(req->req);
+		}
+	} else if (req->req) {
+		/* No con, but a request; free it */
 		evhtp_request_free(req->req);
 	}
 
 	if (req->con)
 		evhtp_connection_free(req->con);
+
 	if (req->host)
 		free(req->host);
 	if (req->uri)
@@ -292,7 +327,7 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
 
 	evhtp_set_hook(&r->con->hooks, evhtp_hook_on_connection_fini,
 	    clt_upstream_conn_fini, r);
-
+	debug_printf("%s: %p: called; con=%p\n", __func__, r, r->con);
 	return (r);
 
 error:

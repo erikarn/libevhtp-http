@@ -21,6 +21,7 @@
 #include "debug.h"
 #include "thr.h"
 #include "clt.h"
+#include "mgr_config.h"
 #include "mgr.h"
 
 void

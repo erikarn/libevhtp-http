@@ -23,6 +23,7 @@
 
 #include "thr.h"
 #include "clt.h"
+#include "mgr_config.h"
 #include "mgr.h"
 
 
@@ -134,8 +135,8 @@ static int
 clt_mgr_check_create_http_request(struct clt_mgr *mgr)
 {
 
-	if ((mgr->target_global_request_count > 0) &&
-	    mgr->req_count >= mgr->target_global_request_count)
+	if ((mgr->cfg.target_global_request_count > 0) &&
+	    mgr->req_count >= mgr->cfg.target_global_request_count)
 		return (0);
 
 	return (1);
@@ -156,10 +157,10 @@ clt_mgr_check_create_conn(struct clt_mgr *mgr)
 	if (mgr->mgr_state != CLT_MGR_STATE_RUNNING &&
 	    mgr->mgr_state != CLT_MGR_STATE_INIT)
 		return(0);
-	if ((mgr->target_total_nconn_count > 0) &&
-	    mgr->conn_count >= mgr->target_total_nconn_count)
+	if ((mgr->cfg.target_total_nconn_count > 0) &&
+	    mgr->conn_count >= mgr->cfg.target_total_nconn_count)
 		return (0);
-	if (mgr->nconn >= mgr->target_nconn)
+	if (mgr->nconn >= mgr->cfg.target_nconn)
 		return (0);
 
 	return (1);
@@ -180,11 +181,11 @@ clt_mgr_check_finished(struct clt_mgr *mgr)
 	/* XXX TODO: need a timeout based config option */
 
 	/* number of total requests */
-	if ((mgr->target_global_request_count > 0) &&
-	    mgr->req_count >= mgr->target_global_request_count)
+	if ((mgr->cfg.target_global_request_count > 0) &&
+	    mgr->req_count >= mgr->cfg.target_global_request_count)
 		return (1);
-	if ((mgr->target_total_nconn_count > 0) &&
-	    mgr->conn_count >= mgr->target_total_nconn_count)
+	if ((mgr->cfg.target_total_nconn_count > 0) &&
+	    mgr->conn_count >= mgr->cfg.target_total_nconn_count)
 		return (1);
 
 	return (0);
@@ -321,7 +322,7 @@ clt_mgr_conn_http_req_event(evutil_socket_t sock, short which, void *arg)
 
 	/* Issue a new HTTP request */
 	c->pending_http_req = 0;
-	if (clt_req_create(c->req, c->mgr->uri, c->mgr->http_keepalive) < 0) {
+	if (clt_req_create(c->req, c->mgr->cfg.uri, c->mgr->cfg.http_keepalive) < 0) {
 		printf("%s: %p: failed to create HTTP connection\n",
 		    __func__,
 		    c);
@@ -331,7 +332,7 @@ clt_mgr_conn_http_req_event(evutil_socket_t sock, short which, void *arg)
 		return;
 	}
 
-	c->cur_req_count ++;
+	c->cur_req_count++;
 	c->mgr->req_count++;
 }
 
@@ -347,7 +348,7 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 	}
 	c->mgr = mgr;
 	c->req = clt_conn_create(mgr->thr, clt_mgr_conn_notify_cb,
-	    c, mgr->host, mgr->port);
+	    c, mgr->cfg.host, mgr->cfg.port);
 	c->ev_new_http_req = event_new(mgr->thr->t_evbase,
 	    -1,
 	    0,
@@ -362,8 +363,8 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 		fprintf(stderr, "%s: clt_conn_create: failed\n", __func__);
 		goto error;
 	}
-	c->target_request_count = mgr->target_request_count;
-	c->wait_time_pre_http_req_msec = mgr->wait_time_pre_http_req_msec;
+	c->target_request_count = mgr->cfg.target_request_count;
+	c->wait_time_pre_http_req_msec = mgr->cfg.wait_time_pre_http_req_msec;
 
 	TAILQ_INSERT_TAIL(&mgr->mgr_conn_list, c, node);
 
@@ -386,7 +387,7 @@ clt_mgr_waiting_schedule(struct clt_mgr *m)
 {
 	struct timeval tv;
 
-	tv.tv_sec = m->waiting_period_sec;
+	tv.tv_sec = m->cfg.waiting_period_sec;
 	tv.tv_usec = 0;
 	evtimer_add(m->t_wait_timerev, &tv);
 }
@@ -429,10 +430,10 @@ static void
 clt_mgr_set_running_timer(struct clt_mgr *m)
 {
 	struct timeval tv;
-	if (m->running_period_sec < 0)
+	if (m->cfg.running_period_sec < 0)
 		return;
 
-	tv.tv_sec = m->running_period_sec;
+	tv.tv_sec = m->cfg.running_period_sec;
 	tv.tv_usec = 0;
 	evtimer_add(m->t_running_timerev, &tv);
 
@@ -446,8 +447,8 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 	struct clt_mgr_conn *c;
 
 	for (i = m->nconn, j = 0;
-	    (i < m->target_nconn &&
-	    j <= m->burst_conn);
+	    (i < m->cfg.target_nconn &&
+	    j <= m->cfg.burst_conn);
 	    i++, j++) {
 		/* break if we hit our global connection limit */
 		if (! clt_mgr_check_create_conn(m))
@@ -618,43 +619,43 @@ clt_mgr_config(struct clt_mgr *m, const char *host,
 	struct timeval tv;
 
 	/* XXX TODO: error chceking */
-	m->host = strdup(host);
-	m->port = port;
-	m->uri = strdup(uri);
+	m->cfg.host = strdup(host);
+	m->cfg.port = port;
+	m->cfg.uri = strdup(uri);
 
 	/* How many connections to keep open */
-	m->target_nconn = 16384;
+	m->cfg.target_nconn = 16384;
 
 	/* How many to try and open every 100ms */
-	m->burst_conn = 1024;
+	m->cfg.burst_conn = 1024;
 
 	/* Maximum number of requests per connection; -1 for unlimited */
-	m->target_request_count = -1;
+	m->cfg.target_request_count = -1;
 
 	/* Time to wait (msec) before issuing a HTTP request */
-	m->wait_time_pre_http_req_msec = 1;
+	m->cfg.wait_time_pre_http_req_msec = 1;
 
 	/* How many global connections to make, -1 for no limit */
-	m->target_total_nconn_count = -1;
+	m->cfg.target_total_nconn_count = -1;
 
 	/* How many global requests to make, -1 for no limit */
-	m->target_global_request_count = 20480;
+	m->cfg.target_global_request_count = 20480;
 
 	/* Keepalive? (global for now) */
-	m->http_keepalive = 1;
+	m->cfg.http_keepalive = 1;
 
 	/*
 	 * How long to run the test for in RUNNING, before
 	 * we transition to WAITING regardless, or -1 for
 	 * no time based limit.
 	 */
-	m->running_period_sec = 3;
+	m->cfg.running_period_sec = 3;
 
 	/*
 	 * How long to wait around during WAITING for connections
 	 * to finish and close
 	 */
-	m->waiting_period_sec = 10;
+	m->cfg.waiting_period_sec = 10;
 
 	return (0);
 }

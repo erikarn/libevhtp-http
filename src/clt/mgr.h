@@ -37,33 +37,11 @@ struct clt_mgr {
 	/* CLEANUP timer event */
 	event_t *t_cleanup_timerev;
 
+	/* Configuration */
+	struct mgr_config cfg;
+
 	/* How many open connections */
 	int nconn;
-
-	/* How many per burst */
-	int burst_conn;
-
-	/* how many to attempt to open */
-	int target_nconn;
-
-	/* how many requests each conn should run before finishing */
-	int target_request_count;
-
-	/* .. and a global limit */
-	int target_global_request_count;
-
-	/* how many connections should be run before finishing */
-	int target_total_nconn_count;
-
-	/* How long to run for in RUNNING before finishing */
-	int running_period_sec;
-
-	/* WAITING phase configuration */
-	/*
-	 * How long to wait for connections to complete
-	 * before moving to CLEANUP.
-	 */
-	int waiting_period_sec;
 
 	/* statistics */
 	uint64_t conn_count;
@@ -74,13 +52,6 @@ struct clt_mgr {
 	uint64_t req_count_err;
 	uint64_t req_count_create_err;
 	uint64_t req_count_timeout;
-
-	/* Configuration for clients */
-	char *host;
-	int port;
-	char *uri;
-	int wait_time_pre_http_req_msec;
-	int http_keepalive;
 };
 
 /*

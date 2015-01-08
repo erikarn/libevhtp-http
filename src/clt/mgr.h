@@ -90,8 +90,6 @@ struct clt_mgr_conn {
 	int pending_http_req;
 };
 
-extern	int clt_mgr_config(struct clt_mgr *m, const char *host,
-	    int port, const char *uri);
 extern	int clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th);
 extern	int clt_mgr_start(struct clt_mgr *m);
 

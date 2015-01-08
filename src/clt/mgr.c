@@ -613,54 +613,6 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 }
 
 int
-clt_mgr_config(struct clt_mgr *m, const char *host,
-    int port, const char *uri)
-{
-	struct timeval tv;
-
-	/* XXX TODO: error chceking */
-	m->cfg.host = strdup(host);
-	m->cfg.port = port;
-	m->cfg.uri = strdup(uri);
-
-	/* How many connections to keep open */
-	m->cfg.target_nconn = 16384;
-
-	/* How many to try and open every 100ms */
-	m->cfg.burst_conn = 1024;
-
-	/* Maximum number of requests per connection; -1 for unlimited */
-	m->cfg.target_request_count = -1;
-
-	/* Time to wait (msec) before issuing a HTTP request */
-	m->cfg.wait_time_pre_http_req_msec = 1;
-
-	/* How many global connections to make, -1 for no limit */
-	m->cfg.target_total_nconn_count = -1;
-
-	/* How many global requests to make, -1 for no limit */
-	m->cfg.target_global_request_count = 20480;
-
-	/* Keepalive? (global for now) */
-	m->cfg.http_keepalive = 1;
-
-	/*
-	 * How long to run the test for in RUNNING, before
-	 * we transition to WAITING regardless, or -1 for
-	 * no time based limit.
-	 */
-	m->cfg.running_period_sec = 3;
-
-	/*
-	 * How long to wait around during WAITING for connections
-	 * to finish and close
-	 */
-	m->cfg.waiting_period_sec = 10;
-
-	return (0);
-}
-
-int
 clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th)
 {
 	m->thr = th;

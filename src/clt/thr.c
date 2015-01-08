@@ -18,10 +18,8 @@
 
 #include <evhtp.h>
 
+#include "debug.h"
 #include "thr.h"
-
-//#define	debug_printf(...)
-#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
 int
 clt_thr_setup(struct clt_thr *th, int tid)

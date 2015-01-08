@@ -18,11 +18,10 @@
 
 #include <evhtp.h>
 
+#include "debug.h"
+
 #include "thr.h"
 #include "clt.h"
-
-#define	debug_printf(...)
-//#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
 const char *
 clt_notify_to_str(clt_notify_cmd_t ct)

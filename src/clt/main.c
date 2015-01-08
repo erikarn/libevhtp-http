@@ -18,12 +18,10 @@
 
 #include <evhtp.h>
 
+#include "debug.h"
 #include "thr.h"
 #include "clt.h"
 #include "mgr.h"
-
-//#define	debug_printf(...)
-#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
 int
 main(int argc, const char *argv[])

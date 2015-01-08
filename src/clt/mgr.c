@@ -19,12 +19,12 @@
 
 #include <evhtp.h>
 
+#include "debug.h"
+
 #include "thr.h"
 #include "clt.h"
 #include "mgr.h"
 
-#define	debug_printf(...)
-//#define	debug_printf(...) fprintf(stderr, __VA_ARGS__)
 
 static const char *
 clt_mgr_state_str(clt_mgr_state_t state)

@@ -3,5 +3,9 @@
 * add tracking for connect time, request send time, response htime, etc.
 * .. maybe something to validate response bodies? (ie, no
   corruption by some proxy in the middle?)
-
+* when we move from RUNNING to WAITING, the individual clients keep issuing
+  HTTP requests - which is fine, but they should stop once they hit
+  their limit.  Which is fine, except if the per-connection request limit
+  is -1.  In that instance, they should go "oh, can't do any more new requests"
+  and stop issuing requests.
 

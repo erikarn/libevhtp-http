@@ -23,6 +23,11 @@
 #include "clt.h"
 #include "mgr.h"
 
+void
+sighdl_pipe(int s)
+{
+}
+
 int
 main(int argc, const char *argv[])
 {
@@ -33,6 +38,8 @@ main(int argc, const char *argv[])
 	if (th == NULL) {
 		err(127, "%s: calloc", __func__);
 	}
+
+	signal(SIGPIPE, sighdl_pipe);
 
 	/* Create thread state */
 	if (clt_thr_setup(th, 0) != 0)
@@ -47,7 +54,7 @@ main(int argc, const char *argv[])
 	clt_mgr_setup(m, th);
 
 	/* Test configuration */
-	clt_mgr_config(m, "10.11.2.2", 8080, "/size");
+	clt_mgr_config(m, "10.11.2.1", 8080, "/size");
 
 	/* Kick things off */
 	clt_mgr_start(m);

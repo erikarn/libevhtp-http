@@ -41,6 +41,8 @@ clt_mgr_state_str(clt_mgr_state_t state)
 		return "WAITING";
 	case CLT_MGR_STATE_CLEANUP:
 		return "CLEANUP";
+	case CLT_MGR_STATE_CLEANUP_WAITING:
+		return "CLEANUP_WAITING";
 	case CLT_MGR_STATE_COMPLETED:
 		return "COMPLETED";
 	default:
@@ -482,9 +484,31 @@ clt_mgr_timer_state_waiting(struct clt_mgr *m)
 }
 
 static void
+clt_mgr_timer_state_cleanup_waiting(struct clt_mgr *m)
+{
+	if (m->mgr_state != CLT_MGR_STATE_CLEANUP_WAITING) {
+		printf("%s: unexpected state? (%s)\n",
+		    __func__,
+		    clt_mgr_state_str(m->mgr_state));
+		return;
+	}
+
+	/* Are all the connections closed and destroyed? */
+	/* XXX methodize this! */
+	if (m->nconn != 0)
+		return;
+
+	/* Deleting the final timer causes the event loop to exit */
+	/* We shouldn't rely on this specific behaviour though! */
+	clt_mgr_state_change(m, CLT_MGR_STATE_COMPLETED);
+	evtimer_del(m->t_timerev);
+}
+
+static void
 clt_mgr_cleanup_timer(evutil_socket_t sock, short which, void *arg)
 {
 	struct clt_mgr *m = arg;
+	struct clt_mgr_conn *c, *cn;
 
 	printf("%s: called\n", __func__);
 
@@ -495,15 +519,13 @@ clt_mgr_cleanup_timer(evutil_socket_t sock, short which, void *arg)
 		return;
 	}
 
-	/* Walk the list of open http connections, forcibly them */
-	/* XXX TODO: we don't maintain this as a list! */
+	/* Walk the list of open http connections, forcibly closing them */
+	TAILQ_FOREACH_SAFE(c, &m->mgr_conn_list, node, cn) {
+		clt_mgr_conn_destroy(c);
+	}
 
-	/* Bump to COMPLETED phase; we're done. */
-	clt_mgr_state_change(m, CLT_MGR_STATE_COMPLETED);
-
-	/* Deleting the final timer causes the event loop to exit */
-	/* We shouldn't rely on this specific behaviour though! */
-	evtimer_del(m->t_timerev);
+	/* Bump to COMPLETED_WAITING phase to cleanup */
+	clt_mgr_state_change(m, CLT_MGR_STATE_CLEANUP_WAITING);
 }
 
 static void
@@ -521,6 +543,10 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 		clt_mgr_timer_state_waiting(m);
 		break;
 	case CLT_MGR_STATE_CLEANUP:
+		break;
+	case CLT_MGR_STATE_CLEANUP_WAITING:
+		clt_mgr_timer_state_cleanup_waiting(m);
+		break;
 	case CLT_MGR_STATE_COMPLETED:
 		break;
 	default:
@@ -539,6 +565,10 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	    (unsigned long long) m->req_count_ok,
 	    (unsigned long long) m->req_count_err,
 	    (unsigned long long) m->req_count_timeout);
+
+	/* Nope, don't add the timer again if we've hit COMPLETED */
+	if (m->mgr_state == CLT_MGR_STATE_COMPLETED)
+		return;
 
 	tv.tv_sec = 0;
 	tv.tv_usec = 100000;

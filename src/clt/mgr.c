@@ -611,8 +611,9 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 		    clt_mgr_state_str(m->mgr_state));
 	}
 
-	printf("%s: nconn=%d, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
+	printf("%s: %s: nconn=%d, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
 	    __func__,
+	    clt_mgr_state_str(m->mgr_state),
 	    (int) m->nconn,
 	    (unsigned long long) m->conn_count,
 	    (unsigned long long) m->conn_closing_count,

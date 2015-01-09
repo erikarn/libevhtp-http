@@ -224,6 +224,7 @@ clt_upstream_chunks_done(evhtp_request_t * upstream_req, void * arg)
 
 	debug_printf("%s: %p: called\n", __func__, r);
 	/* XXX is this ok here? What if we get 200 OK but we don't get the full response? */
+	/* XXX this should be called by the general _cb() request handler */
 	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_OK, upstream_req->status);
 
 	return (EVHTP_RES_OK);
@@ -343,7 +344,13 @@ error:
 }
 
 /*
- * Transaction completed
+ * Transaction completed - notify upper layers
+ *
+ * This is called when the transaction is complete,
+ * but libevhtp isnt always freeing the underlying transaction
+ * for us - there seems to be something in there about
+ * freeing on writecb() if it's a keepalive request,
+ * but it's not always being freed.
  */
 static void
 clt_req_cb(evhtp_request_t *r, void *arg)
@@ -354,9 +361,10 @@ clt_req_cb(evhtp_request_t *r, void *arg)
 
 	/* XXX TODO: hook? */
 
-//	evhtp_unset_all_hooks(&req->req->hooks);
+	evhtp_unset_all_hooks(&req->req->hooks);
 //	req->req = NULL;
-//	clt_req_destroy(req);
+	req->con->request = NULL;
+	clt_req_destroy(req);
 }
 
 int

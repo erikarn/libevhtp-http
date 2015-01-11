@@ -28,13 +28,21 @@ typedef enum {
 	REQ_TYPE_SIZE,
 } req_type_t;
 
+struct http_app {
+	int port;
+	int ncpu;
+	evbase_t *evbase;
+	evhtp_t *htp;
+};
+
 struct thr {
+	struct http_app *app;
 	int t_tid;		/* thread id; local */
 	int t_listen_fd;	/* listen_fd, or -1 for "we just asked evhtp for one */
 	int t_our_fd;		/* 1 if the listen_fd is ours to use */
 	pthread_t t_thr;
 	evbase_t *t_evbase;
-	evhtp_t  *t_htp;
+	evhtp_t *t_htp;
 };
 
 struct req {
@@ -416,21 +424,25 @@ http_init_thread(evhtp_t *http, evthr_t *thread, void *arg)
  */
 
 int
-main(int argc, char ** argv) {
-    evbase_t * evbase = event_base_new();
-    evhtp_t  * htp    = evhtp_new(evbase, NULL);
+main(int argc, char ** argv)
+{
+	struct http_app app;
 
-    signal(SIGPIPE, sighdl_pipe);
+	bzero(&app, sizeof(app));
 
-    evhtp_set_cb(htp, "/line", linecb, NULL);
-    evhtp_set_cb(htp, "/size", sizecb, NULL);
+	app.port = 8080;
+	app.ncpu = 4;
+	app.evbase = event_base_new();
+	app.htp = evhtp_new(app.evbase, NULL);
 
-    /*
-     * There's no HTTP base application thread right now,
-     * so it's NULL.
-     */
-    evhtp_use_threads(htp, http_init_thread, 4, NULL);
-    evhtp_bind_socket(htp, "0.0.0.0", 8080, 1024);
-    event_base_loop(evbase, 0);
-    return 0;
+	signal(SIGPIPE, sighdl_pipe);
+
+	evhtp_set_cb(app.htp, "/line", linecb, NULL);
+	evhtp_set_cb(app.htp, "/size", sizecb, NULL);
+
+	evhtp_use_threads(app.htp, http_init_thread, app.ncpu, &app);
+	evhtp_bind_socket(app.htp, "0.0.0.0", app.port, 1024);
+	event_base_loop(app.evbase, 0);
+
+	exit(0);
 }

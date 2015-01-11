@@ -414,6 +414,62 @@ http_init_thread(evhtp_t *http, evthr_t *thread, void *arg)
 	printf("%s: called\n", __func__);
 }
 
+static void
+usage(const char *progname)
+{
+	printf("%s: --listen-port=<port> --number-threads=<numthr>\n",
+	    progname);
+	return;
+}
+
+enum {
+	OPT_PORT = 1000,
+	OPT_NUMBER_THREADS,
+	OPT_HELP,
+};
+
+static struct option longopts[] = {
+	{ "listen-port", required_argument, NULL, OPT_PORT },
+	{ "number-threads", required_argument, NULL, OPT_NUMBER_THREADS },
+	{ "help", no_argument, NULL, OPT_HELP },
+	{ NULL, 0, NULL, 0 },
+};
+
+static int
+parse_opts(struct http_app *app, int argc, char *argv[])
+{
+	int ch;
+
+	while ((ch = getopt_long(argc, argv, "h", longopts, NULL)) != 1) {
+		/*
+		 * XXX I'm tired; ch shouldn't be -1 as above. Grr.
+		 */
+		if (ch == -1)
+			break;
+
+		switch (ch) {
+		case OPT_PORT:
+			app->port = atoi(optarg);
+			break;
+
+		case OPT_NUMBER_THREADS:
+			app->ncpu = atoi(optarg);
+			break;
+
+		case 'h':
+		case OPT_HELP:
+			usage(argv[0]);
+			return (-1);
+
+		default:
+			printf("default; ch=%d\n", ch);
+			usage(argv[0]);
+			return (-1);
+		}
+	}
+	return (0);
+}
+
 /*
  * For now we're using the libevhtp threading model -
  * the FreeBSD-HEAD RSS model would be nicer for what we're
@@ -428,10 +484,19 @@ main(int argc, char ** argv)
 {
 	struct http_app app;
 
+	if (argc < 2) {
+		usage(argv[0]);
+		exit(127);
+	}
+
 	bzero(&app, sizeof(app));
 
 	app.port = 8080;
-	app.ncpu = 4;
+	app.ncpu = 1;
+
+	if (parse_opts(&app, argc, argv) < 0)
+		exit(127);
+
 	app.evbase = event_base_new();
 	app.htp = evhtp_new(app.evbase, NULL);
 

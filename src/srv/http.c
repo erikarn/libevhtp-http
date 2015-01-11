@@ -5,6 +5,7 @@
 #include <err.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <getopt.h>
 
 #include <pthread.h>
 #include <pthread_np.h>
@@ -394,6 +395,25 @@ sighdl_pipe(int s)
 {
 }
 
+static void
+http_init_thread(evhtp_t *http, evthr_t *thread, void *arg)
+{
+
+	/*
+	 * Nothing to do; there's no app base or per-thread
+	 * state just yet.
+	 */
+	printf("%s: called\n", __func__);
+}
+
+/*
+ * For now we're using the libevhtp threading model -
+ * the FreeBSD-HEAD RSS model would be nicer for what we're
+ * doing but it'd be non-portable.
+ *
+ * Maybe later on I'll abstract out the threading side of
+ * things so it can be compile time selected.
+ */
 
 int
 main(int argc, char ** argv) {
@@ -404,6 +424,12 @@ main(int argc, char ** argv) {
 
     evhtp_set_cb(htp, "/line", linecb, NULL);
     evhtp_set_cb(htp, "/size", sizecb, NULL);
+
+    /*
+     * There's no HTTP base application thread right now,
+     * so it's NULL.
+     */
+    evhtp_use_threads(htp, http_init_thread, 4, NULL);
     evhtp_bind_socket(htp, "0.0.0.0", 8080, 1024);
     event_base_loop(evbase, 0);
     return 0;

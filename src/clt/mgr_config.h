@@ -6,6 +6,9 @@
  */
 struct mgr_config {
 
+	/* How many client worker threads */
+	int num_threads;
+
 	/* How many per burst */
 	int burst_conn;
 
@@ -38,5 +41,8 @@ struct mgr_config {
 	int wait_time_pre_http_req_msec;
 	int http_keepalive;
 };
+
+extern	int mgr_config_copy_thread(const struct mgr_config *src_cfg,
+	    struct mgr_config *cfg, int nthreads);
 
 #endif	/* __MGR_CONFIG_H__ */

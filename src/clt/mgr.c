@@ -582,6 +582,37 @@ clt_mgr_running_timer(evutil_socket_t sock, short which, void *arg)
 	clt_mgr_state_set_waiting(m);
 }
 
+static void
+clt_mgr_stat_timer(evutil_socket_t sock, short which, void *arg)
+{
+	struct clt_mgr *m = arg;
+	struct timeval tv;
+
+	printf("%s: (%d): %s: nconn=%d, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
+	    __func__,
+	    m->thr->t_tid,
+	    clt_mgr_state_str(m->mgr_state),
+	    (int) m->nconn,
+	    (unsigned long long) m->conn_count,
+	    (unsigned long long) m->conn_closing_count,
+	    (unsigned long long) m->req_count,
+	    (unsigned long long) m->req_count_ok,
+	    (unsigned long long) m->req_count_err,
+	    (unsigned long long) m->req_count_timeout);
+	printf("%s: 200_OK: %llu, 302: %llu, Other: %llu\n",
+	    __func__,
+	    (unsigned long long) m->req_statustype_200,
+	    (unsigned long long) m->req_statustype_302,
+	    (unsigned long long) m->req_statustype_other);
+
+	/* Don't add the timer again if we've hit COMPLETED */
+	if (m->mgr_state == CLT_MGR_STATE_COMPLETED)
+		return;
+
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+	evtimer_add(m->t_stat_timerev, &tv);
+}
 
 static void
 clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
@@ -611,22 +642,6 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 		    clt_mgr_state_str(m->mgr_state));
 	}
 
-	printf("%s: %s: nconn=%d, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
-	    __func__,
-	    clt_mgr_state_str(m->mgr_state),
-	    (int) m->nconn,
-	    (unsigned long long) m->conn_count,
-	    (unsigned long long) m->conn_closing_count,
-	    (unsigned long long) m->req_count,
-	    (unsigned long long) m->req_count_ok,
-	    (unsigned long long) m->req_count_err,
-	    (unsigned long long) m->req_count_timeout);
-	printf("%s: 200_OK: %llu, 302: %llu, Other: %llu\n",
-	    __func__,
-	    (unsigned long long) m->req_statustype_200,
-	    (unsigned long long) m->req_statustype_302,
-	    (unsigned long long) m->req_statustype_other);
-
 	/* Nope, don't add the timer again if we've hit COMPLETED */
 	if (m->mgr_state == CLT_MGR_STATE_COMPLETED)
 		return;
@@ -645,6 +660,7 @@ clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th)
 	TAILQ_INIT(&m->mgr_conn_list);
 
 	m->t_timerev = evtimer_new(th->t_evbase, clt_mgr_timer, m);
+	m->t_stat_timerev = evtimer_new(th->t_evbase, clt_mgr_stat_timer, m);
 	m->t_wait_timerev = evtimer_new(th->t_evbase, clt_mgr_waiting_timer, m);
 	m->t_cleanup_timerev = evtimer_new(th->t_evbase, clt_mgr_cleanup_timer, m);
 	m->t_running_timerev = evtimer_new(th->t_evbase, clt_mgr_running_timer, m);
@@ -667,6 +683,10 @@ clt_mgr_start(struct clt_mgr *m)
 	tv.tv_sec = 0;
 	tv.tv_usec = 100000;
 	evtimer_add(m->t_timerev, &tv);
+
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+	evtimer_add(m->t_stat_timerev, &tv);
 
 	return (0);
 }

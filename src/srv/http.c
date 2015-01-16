@@ -372,15 +372,35 @@ void
 sizecb(evhtp_request_t * req, void * a)
 {
 	struct req *r;
+	evhtp_query_t *q;
+	evhtp_kv_t *f;
+	size_t reqsize;
 
-	r = req_create(req);
-	if (r == NULL) {
-		/* XXX need to signal error; close connection */
+	q = req->uri->query;
+
+	/* Search the query string for a size parameter */
+	f = evhtp_kvs_find_kv(q, "size");
+	if (f == NULL) {
 		evhtp_send_reply(req, EVHTP_RES_ERROR);
 		return;
 	}
-	/* XXX for now, type 'line' */
-	req_set_type_buf(r, 131072);
+
+	reqsize = strtoull(f->val, NULL, 10);
+
+	/* Again, default to 128k for now */
+	if (reqsize == ULLONG_MAX) {
+		evhtp_send_reply(req, EVHTP_RES_ERROR);
+		return;
+	}
+
+	r = req_create(req);
+	if (r == NULL) {
+		evhtp_send_reply(req, EVHTP_RES_ERROR);
+		return;
+	}
+
+	req_set_type_buf(r, reqsize);
+
 	req_start_response(r);
 }
 

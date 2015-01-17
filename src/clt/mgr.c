@@ -135,6 +135,14 @@ clt_mgr_conn_check_create_http_request(struct clt_mgr_conn *c)
 	if (c->is_dead)
 		return (0);
 
+	/*
+	 * If it's unlimited, don't create a new connection
+	 * if we're != RUNNING.
+	 */
+	if ((c->target_request_count <= 0) &&
+	    (c->mgr->mgr_state != CLT_MGR_STATE_RUNNING))
+		return(0);
+
 	if ((c->target_request_count > 0) &&
 	    (c->cur_req_count >= c->target_request_count))
 		return (0);

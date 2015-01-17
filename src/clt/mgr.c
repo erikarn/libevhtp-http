@@ -603,8 +603,8 @@ clt_mgr_stat_timer(evutil_socket_t sock, short which, void *arg)
 	if (m->mgr_state == CLT_MGR_STATE_COMPLETED)
 		return;
 
-	tv.tv_sec = 1;
-	tv.tv_usec = 0;
+	tv.tv_sec = 0;
+	tv.tv_usec = 250000;
 	evtimer_add(m->t_stat_timerev, &tv);
 }
 

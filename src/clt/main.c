@@ -39,6 +39,9 @@ mgr_config_defaults(struct mgr_config *cfg)
 	cfg->port = -1;
 	cfg->uri = NULL;
 
+	/* Default number of threads */
+	cfg->num_threads = 1;
+
 	/* How many connections to keep open */
 	cfg->target_nconn = 128;
 
@@ -46,7 +49,7 @@ mgr_config_defaults(struct mgr_config *cfg)
 	cfg->burst_conn = 10;
 
 	/* Maximum number of requests per connection; -1 for unlimited */
-	cfg->target_request_count = 10;
+	cfg->target_request_count = -1;
 
 	/* Time to wait (msec) before issuing a HTTP request */
 	cfg->wait_time_pre_http_req_msec = 1;
@@ -86,7 +89,8 @@ enum {
 	OPT_TARGET_GLOBAL_REQUEST_COUNT,
 	OPT_HTTP_KEEPALIVE,
 	OPT_RUNNING_PERIOD,
-	OPT_WAITING_PERIOD
+	OPT_WAITING_PERIOD,
+	OPT_NUMBER_THREADS,
 };
 
 static struct option longopts[] = {
@@ -102,6 +106,7 @@ static struct option longopts[] = {
 	{ "http-keepalive", required_argument, NULL, OPT_HTTP_KEEPALIVE },
 	{ "running-period", required_argument, NULL, OPT_RUNNING_PERIOD },
 	{ "waiting-period", required_argument, NULL, OPT_WAITING_PERIOD },
+	{ "number-threads", required_argument, NULL, OPT_NUMBER_THREADS },
 	{ "help", no_argument, NULL, 'h' },
 	{ NULL, 0, NULL, 0 },
 };
@@ -118,6 +123,7 @@ usage(char *progname)
 	printf("    uri: URI path (eg /size)\n");
 	printf("\n");
 	printf("  Optional options:\n");
+	printf("    --number-threads=<number of worker threads>\n");
 	printf("    --target-nconn=<target number of concurrent connections>\n");
 	printf("    --burst-conn=<how many connections to open every 100ms>\n");
 	printf("    --target-request-count=<request count per connection, or -1 for unlimited>\n");
@@ -191,6 +197,10 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 			cfg->waiting_period_sec = atoi(optarg);
 			break;
 
+		case OPT_NUMBER_THREADS:
+			cfg->num_threads = atoi(optarg);
+			break;
+
 		default:
 			usage(argv[0]);
 			return (-1);
@@ -199,49 +209,96 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 	return (0);
 }
 
+void *
+clt_mgr_thread_run(void *arg)
+{
+	struct clt_thr *th = arg;
+	char buf[32];
+
+	printf("[%d] th=%p\n", th->t_tid, th);
+	snprintf(buf, 128, "(%d)", th->t_tid);
+	(void) pthread_set_name_np(th->t_thr, buf);
+
+	/* Kick things off */
+	clt_mgr_start(th->t_m);
+
+	/* Begin! */
+	event_base_loop(th->t_evbase, 0);
+
+	return (NULL);
+}
+
 int
 main(int argc, char *argv[])
 {
 	struct clt_thr *th;
-	struct clt_mgr *m;
+	struct mgr_config cfg;
+	int i;
 
-	th = calloc(1, sizeof(*th));
-	if (th == NULL) {
-		err(127, "%s: calloc", __func__);
-	}
+	/* Parse configuration early */
+	bzero(&cfg, sizeof(cfg));
 
-	signal(SIGPIPE, sighdl_pipe);
-
-	/* Create thread state */
-	if (clt_thr_setup(th, 0) != 0)
-		exit(127);
-
-	m = calloc(1, sizeof(*m));
-	if (m == NULL) {
-		err(127, "%s: calloc", __func__);
-	}
-
-	/* Initial connection setup */
-	clt_mgr_setup(m, th);
-
-	/* Default configuration */
-	mgr_config_defaults(&m->cfg);
+	/* Defaults */
+	mgr_config_defaults(&cfg);
 
 	/* Parse */
-	if (parse_opts(&m->cfg, argc, argv) != 0)
+	if (parse_opts(&cfg, argc, argv) != 0)
 		exit(128);
 
 	/* Minimum config: host, port, ip */
-	if (m->cfg.host == NULL || m->cfg.uri == NULL || m->cfg.port == -1) {
+	if (cfg.host == NULL || cfg.uri == NULL || cfg.port == -1) {
 		usage(argv[0]);
 		exit(128);
 	}
 
-	/* Kick things off */
-	clt_mgr_start(m);
+	signal(SIGPIPE, sighdl_pipe);
 
-	/* Begin! */
-	event_base_loop(th->t_evbase, 0);
+	evthread_use_pthreads();
+
+	/* Allocate worker thread state */
+	th = calloc(cfg.num_threads, sizeof(struct clt_thr));
+	if (th == NULL) {
+		err(127, "%s: calloc", __func__);
+	}
+
+	/* Setup initial workers with local configuration */
+	for (i = 0; i < cfg.num_threads; i++) {
+		if (clt_thr_setup(&th[i], i) != 0)
+			exit(127);
+		th[i].t_m = calloc(1, sizeof(struct clt_mgr));
+		if (th[i].t_m == NULL)
+			err(127, "%s: calloc", __func__);
+
+		/* Setup each client */
+		clt_mgr_setup(th[i].t_m, &th[i]);
+	}
+
+	/*
+	 * Ok, for now let's cheap out and just allocate 1/i
+	 * of the various configuration parameters to each.
+	 * worker thread.
+	 *
+	 * Why's this a bad idea? If one CPU falls a bit behind,
+	 * then the target request rate may not really be
+	 * exactly what we're after.  Ie, we can't shift
+	 * load between worker threads if we need to.
+	 *
+	 * But, ENOTIME, etc.
+	 */
+	for (i = 0; i < cfg.num_threads; i++) {
+		mgr_config_copy_thread(&cfg, &th[i].t_m->cfg, cfg.num_threads);
+	}
+
+	/* Now, start each thread */
+	for (i = 0; i < cfg.num_threads; i++) {
+		if (pthread_create(&th[i].t_thr, NULL, clt_mgr_thread_run, &th[i]) != 0)
+			err(127, "%s: pthread_create", __func__);
+	}
+
+	/* Now, join */
+	for (i = 0; i < cfg.num_threads; i++) {
+		(void) pthread_join(th[i].t_thr, NULL);
+	}
 
 	exit(0);
 }

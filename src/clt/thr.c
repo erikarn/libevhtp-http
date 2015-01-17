@@ -20,6 +20,8 @@
 
 #include "debug.h"
 #include "thr.h"
+#include "mgr_config.h"
+#include "mgr.h"
 
 int
 clt_thr_setup(struct clt_thr *th, int tid)

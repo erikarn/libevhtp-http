@@ -28,6 +28,9 @@ struct clt_mgr {
 	/* Periodic event */
 	event_t  *t_timerev;
 
+	/* Statistics timer event */
+	event_t  *t_stat_timerev;
+
 	/* RUNNING timer event */
 	event_t *t_running_timerev;
 

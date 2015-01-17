@@ -519,6 +519,7 @@ main(int argc, char ** argv)
 
 	app.evbase = event_base_new();
 	app.htp = evhtp_new(app.evbase, NULL);
+	evhtp_set_max_keepalive_requests(app.htp, 0);
 
 	signal(SIGPIPE, sighdl_pipe);
 

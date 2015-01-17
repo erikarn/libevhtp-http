@@ -23,6 +23,7 @@
 #include "debug.h"
 #include "thr.h"
 #include "clt.h"
+#include "mgr_stats.h"
 #include "mgr_config.h"
 #include "mgr.h"
 

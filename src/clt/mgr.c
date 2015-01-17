@@ -23,6 +23,7 @@
 
 #include "thr.h"
 #include "clt.h"
+#include "mgr_stats.h"
 #include "mgr_config.h"
 #include "mgr.h"
 
@@ -71,13 +72,13 @@ mgr_statustype_update(struct clt_mgr *mgr, int status)
 
 	switch (status) {
 	case 200:
-		mgr->req_statustype_200++;
+		mgr->stats.req_statustype_200++;
 		break;
 	case 302:
-		mgr->req_statustype_302++;
+		mgr->stats.req_statustype_302++;
 		break;
 	default:
-		mgr->req_statustype_other++;
+		mgr->stats.req_statustype_other++;
 		break;
 	}
 }
@@ -161,7 +162,7 @@ clt_mgr_check_create_http_request(struct clt_mgr *mgr)
 {
 
 	if ((mgr->cfg.target_global_request_count > 0) &&
-	    mgr->req_count >= mgr->cfg.target_global_request_count)
+	    mgr->stats.req_count >= mgr->cfg.target_global_request_count)
 		return (0);
 
 	return (1);
@@ -183,7 +184,7 @@ clt_mgr_check_create_conn(struct clt_mgr *mgr)
 	    mgr->mgr_state != CLT_MGR_STATE_INIT)
 		return(0);
 	if ((mgr->cfg.target_total_nconn_count > 0) &&
-	    mgr->conn_count >= mgr->cfg.target_total_nconn_count)
+	    mgr->stats.conn_count >= mgr->cfg.target_total_nconn_count)
 		return (0);
 	if (mgr->nconn >= mgr->cfg.target_nconn)
 		return (0);
@@ -207,10 +208,10 @@ clt_mgr_check_finished(struct clt_mgr *mgr)
 
 	/* number of total requests */
 	if ((mgr->cfg.target_global_request_count > 0) &&
-	    mgr->req_count >= mgr->cfg.target_global_request_count)
+	    mgr->stats.req_count >= mgr->cfg.target_global_request_count)
 		return (1);
 	if ((mgr->cfg.target_total_nconn_count > 0) &&
-	    mgr->conn_count >= mgr->cfg.target_total_nconn_count)
+	    mgr->stats.conn_count >= mgr->cfg.target_total_nconn_count)
 		return (1);
 
 	return (0);
@@ -250,12 +251,12 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 	 * path in clt.c can run and completely free the request.
 	 */
 	if (what == CLT_NOTIFY_REQUEST_DONE_OK) {
-		c->mgr->req_count_ok++;
+		c->mgr->stats.req_count_ok++;
 		mgr_statustype_update(c->mgr, data);
 	} else if (what == CLT_NOTIFY_REQUEST_DONE_ERROR) {
-		c->mgr->req_count_err++;
+		c->mgr->stats.req_count_err++;
 	} else if (what == CLT_NOTIFY_REQUEST_TIMEOUT) {
-		c->mgr->req_count_timeout++;
+		c->mgr->stats.req_count_timeout++;
 	} else if (what == CLT_NOTIFY_REQ_DESTROYING) {
 		if (clt_mgr_conn_check_create_http_request(c) &&
 		    clt_mgr_check_create_http_request(c->mgr)) {
@@ -282,7 +283,7 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 		 * or a failure after we've sent the HTTP request;
 		 * sigh.
 		 */
-		c->mgr->conn_closing_count ++;
+		c->mgr->stats.conn_closing_count ++;
 		return (0);
 	}
 
@@ -354,12 +355,12 @@ clt_mgr_conn_http_req_event(evutil_socket_t sock, short which, void *arg)
 		    c);
 
 		/* XXX TODO should kick off some notification about this? */
-		c->mgr->req_count_create_err++;
+		c->mgr->stats.req_count_create_err++;
 		return;
 	}
 
 	c->cur_req_count++;
-	c->mgr->req_count++;
+	c->mgr->stats.req_count++;
 }
 
 static struct clt_mgr_conn *
@@ -483,7 +484,7 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 		if (c == NULL)
 			continue;
 		m->nconn ++;
-		c->mgr->conn_count++;
+		c->mgr->stats.conn_count++;
 		/* Kick start a HTTP request */
 		clt_mgr_conn_start_http_req(c, c->wait_time_pre_http_req_msec);
 	}
@@ -601,17 +602,17 @@ clt_mgr_stat_timer(evutil_socket_t sock, short which, void *arg)
 	    m->thr->t_tid,
 	    clt_mgr_state_str(m->mgr_state),
 	    (int) m->nconn,
-	    (unsigned long long) m->conn_count,
-	    (unsigned long long) m->conn_closing_count,
-	    (unsigned long long) m->req_count,
-	    (unsigned long long) m->req_count_ok,
-	    (unsigned long long) m->req_count_err,
-	    (unsigned long long) m->req_count_timeout);
+	    (unsigned long long) m->stats.conn_count,
+	    (unsigned long long) m->stats.conn_closing_count,
+	    (unsigned long long) m->stats.req_count,
+	    (unsigned long long) m->stats.req_count_ok,
+	    (unsigned long long) m->stats.req_count_err,
+	    (unsigned long long) m->stats.req_count_timeout);
 	printf("%s: 200_OK: %llu, 302: %llu, Other: %llu\n",
 	    __func__,
-	    (unsigned long long) m->req_statustype_200,
-	    (unsigned long long) m->req_statustype_302,
-	    (unsigned long long) m->req_statustype_other);
+	    (unsigned long long) m->stats.req_statustype_200,
+	    (unsigned long long) m->stats.req_statustype_302,
+	    (unsigned long long) m->stats.req_statustype_other);
 
 	/* Don't add the timer again if we've hit COMPLETED */
 	if (m->mgr_state == CLT_MGR_STATE_COMPLETED)

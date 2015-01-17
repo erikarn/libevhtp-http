@@ -14,8 +14,7 @@ mgr_stats_diff(const struct mgr_stats *sfrom, const struct mgr_stats *sto,
     struct mgr_stats *res)
 {
 
-	/* Diff: always the same value */
-	res->nconn = sto->nconn;
+	res->nconn = sto->nconn - sfrom->nconn;
 
 	res->conn_count = sto->conn_count - sfrom->conn_count;
 	res->conn_closing_count = sto->conn_closing_count - sfrom->conn_closing_count;

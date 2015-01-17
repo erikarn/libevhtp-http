@@ -297,7 +297,6 @@ main(int argc, char *argv[])
 
 	/* Now, join */
 	for (i = 0; i < cfg.num_threads; i++) {
-		printf("join: %d\n", i);
 		(void) pthread_join(th[i].t_thr, NULL);
 	}
 

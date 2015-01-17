@@ -21,14 +21,14 @@
 
 #include "debug.h"
 
+#include "mgr_stats.h"
 #include "thr.h"
 #include "clt.h"
-#include "mgr_stats.h"
 #include "mgr_config.h"
 #include "mgr.h"
 
 
-static const char *
+const char *
 clt_mgr_state_str(clt_mgr_state_t state)
 {
 
@@ -186,7 +186,7 @@ clt_mgr_check_create_conn(struct clt_mgr *mgr)
 	if ((mgr->cfg.target_total_nconn_count > 0) &&
 	    mgr->stats.conn_count >= mgr->cfg.target_total_nconn_count)
 		return (0);
-	if (mgr->nconn >= mgr->cfg.target_nconn)
+	if (mgr->stats.nconn >= mgr->cfg.target_nconn)
 		return (0);
 
 	return (1);
@@ -225,7 +225,7 @@ static int
 clt_mgr_check_waiting_finished(struct clt_mgr *mgr)
 {
 
-	if (mgr->nconn == 0)
+	if (mgr->stats.nconn == 0)
 		return (1);
 	return (0);
 }
@@ -315,7 +315,7 @@ _clt_mgr_conn_destroy(struct clt_mgr_conn *c)
 
 	/* Parent count */
 	/* XXX call back to owner instead? */
-	c->mgr->nconn --;
+	c->mgr->stats.nconn --;
 	TAILQ_REMOVE(&c->mgr->mgr_conn_list, c, node);
 
 
@@ -473,7 +473,7 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 	struct clt_thr *th = m->thr;
 	struct clt_mgr_conn *c;
 
-	for (i = m->nconn, j = 0;
+	for (i = m->stats.nconn, j = 0;
 	    (i < m->cfg.target_nconn &&
 	    j <= m->cfg.burst_conn);
 	    i++, j++) {
@@ -483,7 +483,7 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 		c = clt_mgr_conn_create(m);
 		if (c == NULL)
 			continue;
-		m->nconn ++;
+		m->stats.nconn ++;
 		c->mgr->stats.conn_count++;
 		/* Kick start a HTTP request */
 		clt_mgr_conn_start_http_req(c, c->wait_time_pre_http_req_msec);
@@ -549,7 +549,7 @@ clt_mgr_timer_state_cleanup_waiting(struct clt_mgr *m)
 
 	/* Are all the connections closed and destroyed? */
 	/* XXX methodize this! */
-	if (m->nconn != 0)
+	if (m->stats.nconn != 0)
 		return;
 
 	/* Deleting the final timer causes the event loop to exit */
@@ -597,22 +597,7 @@ clt_mgr_stat_timer(evutil_socket_t sock, short which, void *arg)
 	struct clt_mgr *m = arg;
 	struct timeval tv;
 
-	printf("%s: (%d): %s: nconn=%d, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu\n",
-	    __func__,
-	    m->thr->t_tid,
-	    clt_mgr_state_str(m->mgr_state),
-	    (int) m->nconn,
-	    (unsigned long long) m->stats.conn_count,
-	    (unsigned long long) m->stats.conn_closing_count,
-	    (unsigned long long) m->stats.req_count,
-	    (unsigned long long) m->stats.req_count_ok,
-	    (unsigned long long) m->stats.req_count_err,
-	    (unsigned long long) m->stats.req_count_timeout);
-	printf("%s: 200_OK: %llu, 302: %llu, Other: %llu\n",
-	    __func__,
-	    (unsigned long long) m->stats.req_statustype_200,
-	    (unsigned long long) m->stats.req_statustype_302,
-	    (unsigned long long) m->stats.req_statustype_other);
+	m->stats_cb(m, m->stats_cb_data, &m->stats);
 
 	/* Don't add the timer again if we've hit COMPLETED */
 	if (m->mgr_state == CLT_MGR_STATE_COMPLETED)
@@ -661,7 +646,8 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 }
 
 int
-clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th)
+clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th,
+    clt_thr_stats_notify_cb *scb, void *cbdata)
 {
 	m->thr = th;
 
@@ -673,6 +659,8 @@ clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th)
 	m->t_wait_timerev = evtimer_new(th->t_evbase, clt_mgr_waiting_timer, m);
 	m->t_cleanup_timerev = evtimer_new(th->t_evbase, clt_mgr_cleanup_timer, m);
 	m->t_running_timerev = evtimer_new(th->t_evbase, clt_mgr_running_timer, m);
+	m->stats_cb = scb;
+	m->stats_cb_data = cbdata;
 
 	return (0);
 }

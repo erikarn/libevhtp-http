@@ -5,7 +5,6 @@
  * This is the instance of a client manager.
  */
 struct mgr_config {
-
 	/* How many client worker threads */
 	int num_threads;
 

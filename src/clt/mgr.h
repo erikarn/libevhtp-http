@@ -12,6 +12,12 @@ typedef enum {
 } clt_mgr_state_t;
 
 struct clt_mgr_conn;
+struct clt_mgr;
+
+typedef	void clt_thr_stats_notify_cb(struct clt_mgr *mgr,
+	    void *arg,
+	    const struct mgr_stats *stats);
+
 
 /*
  * This is the instance of a client manager.
@@ -43,8 +49,9 @@ struct clt_mgr {
 	/* Configuration */
 	struct mgr_config cfg;
 
-	/* How many open connections */
-	int nconn;
+	/* Stats notify cb */
+	clt_thr_stats_notify_cb *stats_cb;
+	void *stats_cb_data;
 
 	/* statistics */
 	struct mgr_stats stats;
@@ -86,7 +93,9 @@ struct clt_mgr_conn {
 	int pending_http_req;
 };
 
-extern	int clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th);
+extern	const char *clt_mgr_state_str(clt_mgr_state_t state);
+extern	int clt_mgr_setup(struct clt_mgr *m, struct clt_thr *th,
+	    clt_thr_stats_notify_cb *scb, void *scb_data);
 extern	int clt_mgr_start(struct clt_mgr *m);
 
 #endif	/* __MGR_H__ */

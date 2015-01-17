@@ -20,6 +20,7 @@
 
 #include "debug.h"
 
+#include "mgr_stats.h"
 #include "thr.h"
 #include "clt.h"
 

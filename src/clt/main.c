@@ -16,16 +16,27 @@
 #include <sys/cpuset.h>
 #include <sys/socket.h>
 
+#include <machine/atomic.h>
+
 #include <netinet/in.h>
 
 #include <evhtp.h>
 
 #include "debug.h"
+#include "mgr_stats.h"
 #include "thr.h"
 #include "clt.h"
-#include "mgr_stats.h"
 #include "mgr_config.h"
 #include "mgr.h"
+
+
+struct app {
+	struct clt_thr *th;
+	struct mgr_config cfg;
+	unsigned int stats_thread_run;
+	pthread_t th_stats;
+	struct mgr_stats prev_stats;
+};
 
 void
 sighdl_pipe(int s)
@@ -210,14 +221,57 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 	return (0);
 }
 
-void *
+static void
+clt_mgr_stats_print(const char *prefix, const struct mgr_stats *stats)
+{
+	printf("%s: nconn=%llu, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu, ",
+	    prefix,
+#if 0
+	    m->thr->t_tid,
+	    clt_mgr_state_str(m->mgr_state),
+#endif
+	    (unsigned long long) stats->nconn,
+	    (unsigned long long) stats->conn_count,
+	    (unsigned long long) stats->conn_closing_count,
+	    (unsigned long long) stats->req_count,
+	    (unsigned long long) stats->req_count_ok,
+	    (unsigned long long) stats->req_count_err,
+	    (unsigned long long) stats->req_count_timeout);
+	printf("200_OK: %llu, 302: %llu, Other: %llu\n",
+	    (unsigned long long) stats->req_statustype_200,
+	    (unsigned long long) stats->req_statustype_302,
+	    (unsigned long long) stats->req_statustype_other);
+}
+
+static void
+clt_mgr_stats_notify(struct clt_mgr *m, void *cbdata,
+    const struct mgr_stats *stats)
+{
+	struct clt_thr *thr = cbdata;
+	struct mgr_stats stats_diff;
+
+	/* Calculate diffs */
+	bzero(&stats_diff, sizeof(stats_diff));
+
+	pthread_mutex_lock(&thr->prev_stats_mtx);
+	mgr_stats_diff(&thr->prev_stats, stats, &stats_diff);
+
+	/* Store previous result */
+	mgr_stats_copy(stats, &thr->prev_stats);
+
+	pthread_mutex_unlock(&thr->prev_stats_mtx);
+
+	//clt_mgr_stats_print(m, &stats_diff);
+}
+
+static void *
 clt_mgr_thread_run(void *arg)
 {
 	struct clt_thr *th = arg;
 	char buf[32];
 
 	printf("[%d] th=%p\n", th->t_tid, th);
-	snprintf(buf, 128, "(%d)", th->t_tid);
+	snprintf(buf, 128, "thread (%d)", th->t_tid);
 	(void) pthread_set_name_np(th->t_thr, buf);
 
 	/* Kick things off */
@@ -226,28 +280,57 @@ clt_mgr_thread_run(void *arg)
 	/* Begin! */
 	event_base_loop(th->t_evbase, 0);
 
+	clt_mgr_stats_print(buf, &th->t_m->stats);
+
+	return (NULL);
+}
+
+static void *
+app_stats_thread(void *arg)
+{
+	struct app *a = arg;
+	struct mgr_stats stats, sdiff;
+	int i;
+
+	while (atomic_load_acq_int(&a->stats_thread_run) == 1) {
+		sleep(1);
+		bzero(&stats, sizeof(stats));
+		bzero(&sdiff, sizeof(sdiff));
+		for (i = 0; i < a->cfg.num_threads; i++) {
+			pthread_mutex_lock(&a->th[i].prev_stats_mtx);
+			mgr_stats_add(&a->th[i].prev_stats, &stats);
+			pthread_mutex_unlock(&a->th[i].prev_stats_mtx);
+		}
+
+		mgr_stats_diff(&a->prev_stats, &stats, &sdiff);
+		clt_mgr_stats_print("interval_total", &stats);
+		clt_mgr_stats_print("interval_diff", &sdiff);
+		mgr_stats_copy(&stats, &a->prev_stats);
+	}
 	return (NULL);
 }
 
 int
 main(int argc, char *argv[])
 {
-	struct clt_thr *th;
-	struct mgr_config cfg;
+	struct app a;
 	int i;
 
+
+	bzero(&a, sizeof(a));
+
 	/* Parse configuration early */
-	bzero(&cfg, sizeof(cfg));
+	bzero(&a.cfg, sizeof(a.cfg));
 
 	/* Defaults */
-	mgr_config_defaults(&cfg);
+	mgr_config_defaults(&a.cfg);
 
 	/* Parse */
-	if (parse_opts(&cfg, argc, argv) != 0)
+	if (parse_opts(&a.cfg, argc, argv) != 0)
 		exit(128);
 
 	/* Minimum config: host, port, ip */
-	if (cfg.host == NULL || cfg.uri == NULL || cfg.port == -1) {
+	if (a.cfg.host == NULL || a.cfg.uri == NULL || a.cfg.port == -1) {
 		usage(argv[0]);
 		exit(128);
 	}
@@ -257,21 +340,21 @@ main(int argc, char *argv[])
 	evthread_use_pthreads();
 
 	/* Allocate worker thread state */
-	th = calloc(cfg.num_threads, sizeof(struct clt_thr));
-	if (th == NULL) {
+	a.th = calloc(a.cfg.num_threads, sizeof(struct clt_thr));
+	if (a.th == NULL) {
 		err(127, "%s: calloc", __func__);
 	}
 
 	/* Setup initial workers with local configuration */
-	for (i = 0; i < cfg.num_threads; i++) {
-		if (clt_thr_setup(&th[i], i) != 0)
+	for (i = 0; i < a.cfg.num_threads; i++) {
+		if (clt_thr_setup(&a.th[i], i) != 0)
 			exit(127);
-		th[i].t_m = calloc(1, sizeof(struct clt_mgr));
-		if (th[i].t_m == NULL)
+		a.th[i].t_m = calloc(1, sizeof(struct clt_mgr));
+		if (a.th[i].t_m == NULL)
 			err(127, "%s: calloc", __func__);
 
 		/* Setup each client */
-		clt_mgr_setup(th[i].t_m, &th[i]);
+		clt_mgr_setup(a.th[i].t_m, &a.th[i], clt_mgr_stats_notify, &a.th[i]);
 	}
 
 	/*
@@ -286,20 +369,34 @@ main(int argc, char *argv[])
 	 *
 	 * But, ENOTIME, etc.
 	 */
-	for (i = 0; i < cfg.num_threads; i++) {
-		mgr_config_copy_thread(&cfg, &th[i].t_m->cfg, cfg.num_threads);
+	for (i = 0; i < a.cfg.num_threads; i++) {
+		mgr_config_copy_thread(&a.cfg, &a.th[i].t_m->cfg, a.cfg.num_threads);
 	}
 
 	/* Now, start each thread */
-	for (i = 0; i < cfg.num_threads; i++) {
-		if (pthread_create(&th[i].t_thr, NULL, clt_mgr_thread_run, &th[i]) != 0)
+	for (i = 0; i < a.cfg.num_threads; i++) {
+		if (pthread_create(&a.th[i].t_thr, NULL, clt_mgr_thread_run, &a.th[i]) != 0)
 			err(127, "%s: pthread_create", __func__);
 	}
 
-	/* Now, join */
-	for (i = 0; i < cfg.num_threads; i++) {
-		(void) pthread_join(th[i].t_thr, NULL);
+	/* Stats printing thread! */
+	atomic_store_rel_int(&a.stats_thread_run, 1);
+	if (pthread_create(&a.th_stats, NULL, app_stats_thread, &a) != 0)
+		err(127, "%s: pthread_create", __func__);
+
+	/* Now, join to each runner thread */
+	for (i = 0; i < a.cfg.num_threads; i++) {
+		(void) pthread_join(a.th[i].t_thr, NULL);
 	}
+
+	/* Signal the printing thread that we're done */
+	a.stats_thread_run = 0;
+	(void) pthread_join(a.th_stats, NULL);
+
+	/* Completed total! */
+	clt_mgr_stats_print("run_total", &a.prev_stats);
+
+	/* Done! */
 
 	exit(0);
 }

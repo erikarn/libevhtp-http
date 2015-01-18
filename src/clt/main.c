@@ -234,13 +234,13 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 static void
 clt_mgr_stats_print(const char *prefix, const struct mgr_stats *stats)
 {
-	printf("%s: nconn=%llu, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu, ",
+	printf("%s: nconn=%lld, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu, ",
 	    prefix,
 #if 0
 	    m->thr->t_tid,
 	    clt_mgr_state_str(m->mgr_state),
 #endif
-	    (unsigned long long) stats->nconn,
+	    (long long) stats->nconn,
 	    (unsigned long long) stats->conn_count,
 	    (unsigned long long) stats->conn_closing_count,
 	    (unsigned long long) stats->req_count,

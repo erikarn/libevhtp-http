@@ -116,8 +116,10 @@ clt_conn_destroy(struct client_req *req)
 	if (req->con)
 		evhtp_connection_free(req->con);
 
-	if (req->host)
-		free(req->host);
+	if (req->host_ip)
+		free(req->host_ip);
+	if (req->host_hdr)
+		free(req->host_hdr);
 	if (req->uri)
 		free(req->uri);
 
@@ -301,7 +303,7 @@ clt_upstream_fini(evhtp_request_t * upstream_req, void * arg)
  */
 struct client_req *
 clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
-    const char *host, int port)
+    const char *host_ip, const char *host_hdr, int port)
 {
 	struct client_req *r;
 
@@ -311,15 +313,20 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
 		goto error;
 	}
 
-	r->host = strdup(host);
-	if (r->host == NULL) {
+	r->host_ip = strdup(host_ip);
+	if (r->host_ip == NULL) {
+		warn("%s: strdup\n", __func__);
+		goto error;
+	}
+	r->host_hdr = strdup(host_ip);
+	if (r->host_hdr == NULL) {
 		warn("%s: strdup\n", __func__);
 		goto error;
 	}
 	r->port = port;
 	r->thr = thr;
 	r->uri = NULL;	/* No URI yet */
-	r->con = evhtp_connection_new(thr->t_evbase, r->host, r->port);
+	r->con = evhtp_connection_new(thr->t_evbase, r->host_ip, r->port);
 	r->cb.cb = cb;
 	r->cb.cbdata = cbdata;
 	if (r->con == NULL) {
@@ -333,8 +340,10 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
 	return (r);
 
 error:
-	if (r && r->host)
-		free(r->host);
+	if (r && r->host_ip)
+		free(r->host_ip);
+	if (r && r->host_hdr)
+		free(r->host_hdr);
 	if (r && r->uri)
 		free(r->uri);
 	if (r && r->con)
@@ -407,7 +416,7 @@ clt_req_create(struct client_req *req, const char *uri, int keepalive)
 
 	/* Add headers */
 	evhtp_headers_add_header(req->req->headers_out,
-	    evhtp_header_new("Host", req->host, 0, 0));
+	    evhtp_header_new("Host", req->host_hdr, 0, 0));
 	evhtp_headers_add_header(req->req->headers_out,
 	    evhtp_header_new("User-Agent", "client", 0, 0));
 

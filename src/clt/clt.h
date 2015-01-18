@@ -33,7 +33,8 @@ struct client_req {
 	struct clt_thr *thr;
 
 	/* Connection details */
-	char *host;
+	char *host_ip;
+	char *host_hdr;
 	int port;
 
 	/* Request URI */
@@ -70,7 +71,7 @@ extern	void clt_req_destroy(struct client_req *req);
 extern	struct client_req * clt_conn_create(struct clt_thr *thr,
 	    clt_notify_cb *cb,
 	    void *cbdata,
-	    const char *host, int port);
+	    const char *host_ip, const char *host_hdr, int port);
 extern	int clt_req_create(struct client_req *req, const char *uri,
 	    int keepalive);
 extern	const char * clt_notify_to_str(clt_notify_cmd_t ct);

@@ -47,7 +47,8 @@ static void
 mgr_config_defaults(struct mgr_config *cfg)
 {
 	/* XXX TODO: error checking */
-	cfg->host = NULL;
+	cfg->host_ip = NULL;
+	cfg->host_hdr = NULL;
 	cfg->port = -1;
 	cfg->uri = NULL;
 
@@ -91,6 +92,7 @@ mgr_config_defaults(struct mgr_config *cfg)
 
 enum {
 	OPT_HOST_IP = 1000,
+	OPT_HOST_HDR,
 	OPT_PORT,
 	OPT_URI,
 	OPT_TARGET_NCONN,
@@ -107,6 +109,7 @@ enum {
 
 static struct option longopts[] = {
 	{ "host-ip", required_argument, NULL, OPT_HOST_IP },
+	{ "host-hdr", required_argument, NULL, OPT_HOST_HDR },
 	{ "port", required_argument, NULL, OPT_PORT },
 	{ "uri", required_argument, NULL, OPT_URI },
 	{ "target-nconn", required_argument, NULL, OPT_TARGET_NCONN },
@@ -135,6 +138,7 @@ usage(char *progname)
 	printf("    uri: URI path (eg /size)\n");
 	printf("\n");
 	printf("  Optional options:\n");
+	printf("    --host-hdr=<host header; defaults to ipv4 address>\n");
 	printf("    --number-threads=<number of worker threads>\n");
 	printf("    --target-nconn=<target number of concurrent connections>\n");
 	printf("    --burst-conn=<how many connections to open every 100ms>\n");
@@ -162,9 +166,15 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 			return (-1);
 
 		case OPT_HOST_IP:
-			if (cfg->host != NULL)
-				free(cfg->host);
-			cfg->host = strdup(optarg);
+			if (cfg->host_ip != NULL)
+				free(cfg->host_ip);
+			cfg->host_ip = strdup(optarg);
+			break;
+
+		case OPT_HOST_HDR:
+			if (cfg->host_hdr != NULL)
+				free(cfg->host_hdr);
+			cfg->host_hdr = strdup(optarg);
 			break;
 
 		case OPT_PORT:
@@ -330,9 +340,16 @@ main(int argc, char *argv[])
 		exit(128);
 
 	/* Minimum config: host, port, ip */
-	if (a.cfg.host == NULL || a.cfg.uri == NULL || a.cfg.port == -1) {
+	if (a.cfg.host_ip == NULL || a.cfg.uri == NULL || a.cfg.port == -1) {
 		usage(argv[0]);
 		exit(128);
+	}
+
+	/* No host_hdr? Duplicate host_ip */
+	if (a.cfg.host_hdr == NULL) {
+		a.cfg.host_hdr = strdup(a.cfg.host_ip);
+		if (a.cfg.host_hdr == NULL)
+			err(127, "%s: strdup\n", __func__);
 	}
 
 	signal(SIGPIPE, sighdl_pipe);

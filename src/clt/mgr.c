@@ -375,7 +375,10 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 	}
 	c->mgr = mgr;
 	c->req = clt_conn_create(mgr->thr, clt_mgr_conn_notify_cb,
-	    c, mgr->cfg.host, mgr->cfg.port);
+	    c,
+	    mgr->cfg.host_ip,
+	    mgr->cfg.host_hdr,
+	    mgr->cfg.port);
 	c->ev_new_http_req = event_new(mgr->thr->t_evbase,
 	    -1,
 	    0,

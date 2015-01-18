@@ -34,7 +34,8 @@ mgr_config_copy_thread(const struct mgr_config *src_cfg,
 	cfg->running_period_sec = src_cfg->running_period_sec;
 	cfg->waiting_period_sec = src_cfg->waiting_period_sec;
 
-	cfg->host = strdup(src_cfg->host);
+	cfg->host_ip = strdup(src_cfg->host_ip);
+	cfg->host_hdr = strdup(src_cfg->host_hdr);
 	cfg->port = src_cfg->port;
 	cfg->uri = strdup(src_cfg->uri);
 	cfg->wait_time_pre_http_req_msec = src_cfg->wait_time_pre_http_req_msec;

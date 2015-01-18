@@ -34,7 +34,8 @@ struct mgr_config {
 	int waiting_period_sec;
 
 	/* Configuration for clients */
-	char *host;
+	char *host_ip;
+	char *host_hdr;
 	int port;
 	char *uri;
 	int wait_time_pre_http_req_msec;

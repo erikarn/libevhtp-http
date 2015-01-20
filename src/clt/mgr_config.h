@@ -50,7 +50,6 @@ struct mgr_config {
 	struct cfg_ipv4_array ipv4_dst;
 
 	/* Configuration for clients */
-	char *host_ip;
 	char *host_hdr;
 	int port;
 	char *uri;
@@ -64,5 +63,7 @@ extern	int cfg_ipv4_array_add(struct cfg_ipv4_array *a,
 	    const char *addr);
 extern	void cfg_ipv4_array_dup(struct cfg_ipv4_array *dst,
 	    const struct cfg_ipv4_array *src);
+extern	const char * cfg_ipv4_array_get_random(const struct cfg_ipv4_array *r);
+extern	int cfg_ipv4_array_nentries(const struct cfg_ipv4_array *r);
 
 #endif	/* __MGR_CONFIG_H__ */

@@ -367,6 +367,7 @@ static struct clt_mgr_conn *
 clt_mgr_conn_create(struct clt_mgr *mgr)
 {
 	struct clt_mgr_conn *c;
+	const char *addr = NULL, *host = NULL;
 
 	c = calloc(1, sizeof(*c));
 	if (c == NULL) {
@@ -374,10 +375,20 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 		return (NULL);
 	}
 	c->mgr = mgr;
+
+	/* Select a random ipv4 */
+	addr = cfg_ipv4_array_get_random(&mgr->cfg.ipv4_dst);
+
+	/* cfg.host_hdr == NULL? Then make it == addr */
+	if (mgr->cfg.host_hdr == NULL)
+		host = addr;
+	else
+		host = mgr->cfg.host_hdr;
+
 	c->req = clt_conn_create(mgr->thr, clt_mgr_conn_notify_cb,
 	    c,
-	    mgr->cfg.host_ip,
-	    mgr->cfg.host_hdr,
+	    addr,
+	    host,
 	    mgr->cfg.port);
 	c->ev_new_http_req = event_new(mgr->thr->t_evbase,
 	    -1,

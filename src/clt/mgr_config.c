@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 #include "mgr_config.h"
 
 /*
@@ -34,8 +35,10 @@ mgr_config_copy_thread(const struct mgr_config *src_cfg,
 	cfg->running_period_sec = src_cfg->running_period_sec;
 	cfg->waiting_period_sec = src_cfg->waiting_period_sec;
 
-	cfg->host_ip = strdup(src_cfg->host_ip);
-	cfg->host_hdr = strdup(src_cfg->host_hdr);
+	cfg_ipv4_array_dup(&cfg->ipv4_dst, &src_cfg->ipv4_dst);
+
+	if (src_cfg->host_hdr != NULL)
+		cfg->host_hdr = strdup(src_cfg->host_hdr);
 	cfg->port = src_cfg->port;
 	cfg->uri = strdup(src_cfg->uri);
 	cfg->wait_time_pre_http_req_msec = src_cfg->wait_time_pre_http_req_msec;
@@ -72,4 +75,22 @@ cfg_ipv4_array_dup(struct cfg_ipv4_array *dst, const struct cfg_ipv4_array *src)
 		dst->ipv4[i] = strdup(src->ipv4[i]);
 	}
 	dst->n = src->n;
+}
+
+const char *
+cfg_ipv4_array_get_random(const struct cfg_ipv4_array *r)
+{
+
+	/* Don't bother calling random() if we only have one address */
+	if (r->n == 1)
+		return (r->ipv4[0]);
+
+	return (r->ipv4[random() % r->n]);
+}
+
+int
+cfg_ipv4_array_nentries(const struct cfg_ipv4_array *r)
+{
+
+	return (r->n);
 }

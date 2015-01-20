@@ -47,7 +47,6 @@ static void
 mgr_config_defaults(struct mgr_config *cfg)
 {
 	/* XXX TODO: error checking */
-	cfg->host_ip = NULL;
 	cfg->host_hdr = NULL;
 	cfg->port = -1;
 	cfg->uri = NULL;
@@ -138,6 +137,7 @@ usage(char *progname)
 	printf("    uri: URI path (eg /size)\n");
 	printf("\n");
 	printf("  Optional options:\n");
+	printf("    (multiple --host-ip=<addr> can be added to randomly select between each)\n");
 	printf("    --host-hdr=<host header; defaults to ipv4 address>\n");
 	printf("    --number-threads=<number of worker threads>\n");
 	printf("    --target-nconn=<target number of concurrent connections>\n");
@@ -166,9 +166,10 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 			return (-1);
 
 		case OPT_HOST_IP:
-			if (cfg->host_ip != NULL)
-				free(cfg->host_ip);
-			cfg->host_ip = strdup(optarg);
+			if (cfg_ipv4_array_add(&cfg->ipv4_dst, optarg) != 0) {
+				fprintf(stderr, "%s: too many ipv4_dst entries\n", __func__);
+				return (-1);
+			}
 			break;
 
 		case OPT_HOST_HDR:
@@ -340,16 +341,11 @@ main(int argc, char *argv[])
 		exit(128);
 
 	/* Minimum config: host, port, ip */
-	if (a.cfg.host_ip == NULL || a.cfg.uri == NULL || a.cfg.port == -1) {
+	if (cfg_ipv4_array_nentries(&a.cfg.ipv4_dst) == 0 ||
+	    a.cfg.uri == NULL ||
+	    a.cfg.port == -1) {
 		usage(argv[0]);
 		exit(128);
-	}
-
-	/* No host_hdr? Duplicate host_ip */
-	if (a.cfg.host_hdr == NULL) {
-		a.cfg.host_hdr = strdup(a.cfg.host_ip);
-		if (a.cfg.host_hdr == NULL)
-			err(127, "%s: strdup\n", __func__);
 	}
 
 	signal(SIGPIPE, sighdl_pipe);

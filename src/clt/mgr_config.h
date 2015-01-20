@@ -2,6 +2,19 @@
 #define	__MGR_CONFIG_H__
 
 /*
+ * This is an array of IPv4 addresses -
+ * a total hack, but enough to bootstrap
+ * talking to multiple destinations from multiple
+ * sources.
+ */
+#define	CFG_IPV4_ARRAY_MAX	16
+
+struct cfg_ipv4_array {
+	char *ipv4[CFG_IPV4_ARRAY_MAX];
+	int n;
+};
+
+/*
  * This is the instance of a client manager.
  */
 struct mgr_config {
@@ -33,6 +46,9 @@ struct mgr_config {
 	 */
 	int waiting_period_sec;
 
+	/* Array of servers to hit */
+	struct cfg_ipv4_array ipv4_dst;
+
 	/* Configuration for clients */
 	char *host_ip;
 	char *host_hdr;
@@ -44,5 +60,9 @@ struct mgr_config {
 
 extern	int mgr_config_copy_thread(const struct mgr_config *src_cfg,
 	    struct mgr_config *cfg, int nthreads);
+extern	int cfg_ipv4_array_add(struct cfg_ipv4_array *a,
+	    const char *addr);
+extern	void cfg_ipv4_array_dup(struct cfg_ipv4_array *dst,
+	    const struct cfg_ipv4_array *src);
 
 #endif	/* __MGR_CONFIG_H__ */

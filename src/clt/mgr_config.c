@@ -43,3 +43,33 @@ mgr_config_copy_thread(const struct mgr_config *src_cfg,
 
 	return (0);
 }
+
+void
+cfg_ipv4_array_init(struct cfg_ipv4_array *a)
+{
+
+	bzero(a, sizeof(*a));
+}
+
+int
+cfg_ipv4_array_add(struct cfg_ipv4_array *a, const char *addr)
+{
+
+	if (a->n >= CFG_IPV4_ARRAY_MAX)
+		return (-1);
+	a->ipv4[a->n] = strdup(addr);
+	a->n++;
+
+	return (0);
+}
+
+void
+cfg_ipv4_array_dup(struct cfg_ipv4_array *dst, const struct cfg_ipv4_array *src)
+{
+	int i;
+
+	for (i = 0; i < src->n; i++) {
+		dst->ipv4[i] = strdup(src->ipv4[i]);
+	}
+	dst->n = src->n;
+}

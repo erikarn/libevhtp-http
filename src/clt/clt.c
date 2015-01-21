@@ -173,6 +173,10 @@ clt_upstream_conn_fini(evhtp_connection_t *conn, void *arg)
 	 * it just plainly won't work.
 	 */
 	evhtp_unset_all_hooks(&conn->hooks);
+	if (r->req) {
+		/* We don't want the req hooks either */
+		evhtp_unset_all_hooks(&r->req->hooks);
+	}
 	r->con = NULL;
 	r->req = NULL;
 

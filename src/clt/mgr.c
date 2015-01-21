@@ -497,7 +497,11 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 		c = clt_mgr_conn_create(m);
 		if (c == NULL) {
 			m->stats.nconn_create_failed++;
-			continue;
+			/*
+			 * For now break out; let's only handle one
+			 * failure per clock tick to minimize damage.
+			 */
+			break;
 		}
 		m->stats.nconn ++;
 		c->mgr->stats.conn_count++;

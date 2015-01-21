@@ -330,7 +330,7 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
 	r->cb.cb = cb;
 	r->cb.cbdata = cbdata;
 	if (r->con == NULL) {
-		warn("%s: evhtp_connection_new", __func__);
+		debug_printf("%s: thr=%p: evhtp_connection_new failed\n", __func__, thr);
 		goto error;
 	}
 

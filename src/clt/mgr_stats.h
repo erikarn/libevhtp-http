@@ -5,6 +5,7 @@ struct mgr_stats {
 	/* How many open connections - gauge, not counter */
 	int nconn;
 
+	uint64_t nconn_create_failed;
 	uint64_t conn_count;
 	uint64_t conn_closing_count;
 

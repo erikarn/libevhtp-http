@@ -401,7 +401,7 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 	    clt_mgr_conn_destroy_event,
 	    c);
 	if (c->req == NULL) {
-		fprintf(stderr, "%s: clt_conn_create: failed\n", __func__);
+		debug_printf("%s: clt_conn_create: failed\n", __func__);
 		goto error;
 	}
 	c->target_request_count = mgr->cfg.target_request_count;
@@ -495,8 +495,10 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 		if (! clt_mgr_check_create_conn(m))
 			break;
 		c = clt_mgr_conn_create(m);
-		if (c == NULL)
+		if (c == NULL) {
+			m->stats.nconn_create_failed++;
 			continue;
+		}
 		m->stats.nconn ++;
 		c->mgr->stats.conn_count++;
 		/* Kick start a HTTP request */

@@ -29,6 +29,7 @@
 #include "mgr_config.h"
 #include "mgr.h"
 
+const char *malloc_conf = "junk:true";
 
 struct app {
 	struct clt_thr *th;
@@ -235,7 +236,7 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 static void
 clt_mgr_stats_print(const char *prefix, const struct mgr_stats *stats)
 {
-	printf("%s: nconn=%lld, conn_count=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu, ",
+	printf("%s: nconn=%lld, conn_count=%llu, conn_create_failed=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu, ",
 	    prefix,
 #if 0
 	    m->thr->t_tid,
@@ -243,6 +244,7 @@ clt_mgr_stats_print(const char *prefix, const struct mgr_stats *stats)
 #endif
 	    (long long) stats->nconn,
 	    (unsigned long long) stats->conn_count,
+	    (unsigned long long) stats->nconn_create_failed,
 	    (unsigned long long) stats->conn_closing_count,
 	    (unsigned long long) stats->req_count,
 	    (unsigned long long) stats->req_count_ok,

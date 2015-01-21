@@ -15,6 +15,7 @@ mgr_stats_diff(const struct mgr_stats *sfrom, const struct mgr_stats *sto,
 {
 
 	res->nconn = sto->nconn - sfrom->nconn;
+	res->nconn_create_failed = sto->nconn_create_failed - sfrom->nconn_create_failed;
 
 	res->conn_count = sto->conn_count - sfrom->conn_count;
 	res->conn_closing_count = sto->conn_closing_count - sfrom->conn_closing_count;
@@ -35,6 +36,8 @@ mgr_stats_add(const struct mgr_stats *sfrom, struct mgr_stats *sto)
 {
 
 	sto->nconn += sfrom->nconn;
+	sto->nconn_create_failed += sfrom->nconn_create_failed;
+
 	sto->conn_count += sfrom->conn_count;
 	sto->conn_closing_count += sfrom->conn_closing_count;
 

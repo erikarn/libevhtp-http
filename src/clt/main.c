@@ -411,6 +411,11 @@ main(int argc, char *argv[])
 	/* Completed total! */
 	clt_mgr_stats_print("run_total", &a.prev_stats);
 
+	/* Free event bases */
+	for (i = 0; i < a.cfg.num_threads; i++) {
+		clt_thr_free(&a.th[i]);
+	}
+
 	/* Done! */
 
 	exit(0);

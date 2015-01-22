@@ -16,5 +16,6 @@ struct clt_thr {
 };
 
 extern	int clt_thr_setup(struct clt_thr *th, int tid);
+extern	void clt_thr_free(struct clt_thr *th);
 
 #endif	/* __THR_H__ */

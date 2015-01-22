@@ -37,3 +37,12 @@ clt_thr_setup(struct clt_thr *th, int tid)
 
 	return (0);
 }
+
+void
+clt_thr_free(struct clt_thr *th)
+{
+
+	pthread_mutex_destroy(&th->prev_stats_mtx);
+	evhtp_free(th->t_htp);
+	event_base_free(th->t_evbase);
+}

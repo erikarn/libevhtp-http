@@ -55,6 +55,9 @@ mgr_config_defaults(struct mgr_config *cfg)
 	/* Default number of threads */
 	cfg->num_threads = 1;
 
+	/* Default to as many requests as one can do */
+	cfg->target_request_rate = -1;
+
 	/* How many connections to keep open */
 	cfg->target_nconn = 128;
 
@@ -105,6 +108,7 @@ enum {
 	OPT_RUNNING_PERIOD,
 	OPT_WAITING_PERIOD,
 	OPT_NUMBER_THREADS,
+	OPT_TARGET_REQUEST_RATE,
 };
 
 static struct option longopts[] = {
@@ -122,6 +126,7 @@ static struct option longopts[] = {
 	{ "running-period", required_argument, NULL, OPT_RUNNING_PERIOD },
 	{ "waiting-period", required_argument, NULL, OPT_WAITING_PERIOD },
 	{ "number-threads", required_argument, NULL, OPT_NUMBER_THREADS },
+	{ "target-request-rate", required_argument, NULL, OPT_TARGET_REQUEST_RATE },
 	{ "help", no_argument, NULL, 'h' },
 	{ NULL, 0, NULL, 0 },
 };
@@ -150,6 +155,7 @@ usage(char *progname)
 	printf("    --http-keepalive=<1 to enable keepalive, 0 for none>\n");
 	printf("    --running-period=<how long to run in seconds, or -1 for no time period>\n");
 	printf("    --waiting-period=<how long to wait to cleanup in seconds>\n");
+	printf( "   --target-request-rate=<how many requests/sec, or -1 for no limit>\n");
 	printf("    --help - this help\n");
 
 	return;
@@ -223,6 +229,10 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 
 		case OPT_NUMBER_THREADS:
 			cfg->num_threads = atoi(optarg);
+			break;
+
+		case OPT_TARGET_REQUEST_RATE:
+			cfg->target_request_rate = atoi(optarg);
 			break;
 
 		default:

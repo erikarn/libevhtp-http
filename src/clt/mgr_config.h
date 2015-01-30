@@ -27,6 +27,9 @@ struct mgr_config {
 	/* how many to attempt to open */
 	int target_nconn;
 
+	/* how many requests per second, or -1 for no limit */
+	int target_request_rate;
+
 	/* how many requests each conn should run before finishing */
 	int target_request_count;
 

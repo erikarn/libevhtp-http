@@ -27,6 +27,27 @@
 #include "mgr_config.h"
 #include "mgr.h"
 
+/*
+ * The timer interval for periodic events (ie, status checks, allowing more
+ * clients to be created, etc) is 10mS.
+ */
+#define	PERIODIC_TIMEREV_SEC	0
+#define	PERIODIC_TIMEREV_USEC	(10 * 1000)
+
+/*
+ * If you adjust the above timerev details,
+ * also update REQRATE_INT to be (n) where (1/n)
+ * matches the timer interval.
+ *
+ * So, for a 10mS timer, it'll be 100 - ie, 1/100 sec.
+ */
+#define	REQRATE_INT		100
+
+/*
+ * The multiplier to use for the fixed-rate math going
+ * on in the request rate pacer.
+ */
+#define	REQRATE_FIXED_MULT	1000
 
 const char *
 clt_mgr_state_str(clt_mgr_state_t state)
@@ -64,6 +85,70 @@ clt_mgr_state_change(struct clt_mgr *mgr, clt_mgr_state_t new_state)
 	/* XXX call callback */
 
 	mgr->mgr_state = new_state;
+}
+
+static void
+clt_mgr_reqrate_pacer_update(struct clt_mgr *m)
+{
+	int t;
+
+	debug_printf("%s: cur=%d\n", __func__, m->request_count_cur);
+
+	m->request_count_target = 0;
+
+	/*
+	 * XXX This assumes we run exactly on REQRATE_INT; this
+	 * may not actually be the case.
+	 */
+	m->request_rate_error -= m->request_count_cur * REQRATE_FIXED_MULT;
+	m->request_rate_error += (m->cfg.target_request_rate * REQRATE_FIXED_MULT) / REQRATE_INT;
+
+	/* Clamp err at sane values */
+	t = (m->cfg.target_request_rate * REQRATE_FIXED_MULT) / REQRATE_INT;
+	if (m->request_rate_error > t)
+		m->request_rate_error = t;
+	else if (m->request_rate_error < -t)
+		m->request_rate_error = -t;
+
+	/* Set new target for the next interval */
+	m->request_count_target = (m->cfg.target_request_rate / REQRATE_INT)
+	    + (m->request_rate_error / REQRATE_FIXED_MULT);
+
+	debug_printf("%s: cur=%d, target=%d, error=%d, interval target=%d\n",
+	    __func__,
+	    m->request_count_cur,
+	    m->cfg.target_request_rate,
+	    m->request_rate_error,
+	    m->request_count_target);
+
+
+	m->request_count_cur = 0;
+}
+
+static int
+clt_mgr_reqrate_pacer_check(struct clt_mgr *m)
+{
+
+	if (m->cfg.target_request_rate < 0)
+		return (1);
+
+#if 0
+	debug_printf("%s: cur=%d, target=%d\n", __func__, m->request_count_cur, m->request_count_target);
+#endif
+	if (m->request_count_cur >= m->request_count_target)
+		return (0);
+
+	return (1);
+}
+
+static void
+clt_mgr_reqrate_pacer_inc(struct clt_mgr *m)
+{
+
+	if (m->cfg.target_request_rate < 0)
+		return;
+
+	m->request_count_cur++;
 }
 
 static void
@@ -259,7 +344,9 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 		c->mgr->stats.req_count_timeout++;
 	} else if (what == CLT_NOTIFY_REQ_DESTROYING) {
 		if (clt_mgr_conn_check_create_http_request(c) &&
-		    clt_mgr_check_create_http_request(c->mgr)) {
+		    clt_mgr_check_create_http_request(c->mgr) &&
+		    clt_mgr_reqrate_pacer_check(c->mgr)) {
+			clt_mgr_reqrate_pacer_inc(c->mgr);
 			clt_mgr_conn_start_http_req(c,
 			    c->wait_time_pre_http_req_msec);
 		} else {
@@ -487,12 +574,23 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 	struct clt_thr *th = m->thr;
 	struct clt_mgr_conn *c;
 
+	/*
+	 * Update the request rate pacer, which'll limit how many requests
+	 * we get to issue this burst.
+	 */
+	if (m->cfg.target_request_rate > 0)
+		clt_mgr_reqrate_pacer_update(m);
+
+	/* XXX TODO: update connection rate pacer */
+
 	for (i = m->stats.nconn, j = 0;
 	    (i < m->cfg.target_nconn &&
 	    j <= m->cfg.burst_conn);
 	    i++, j++) {
 		/* break if we hit our global connection limit */
 		if (! clt_mgr_check_create_conn(m))
+			break;
+		if (! clt_mgr_reqrate_pacer_check(m))
 			break;
 		c = clt_mgr_conn_create(m);
 		if (c == NULL) {
@@ -506,6 +604,7 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 		m->stats.nconn ++;
 		c->mgr->stats.conn_count++;
 		/* Kick start a HTTP request */
+		clt_mgr_reqrate_pacer_inc(m);
 		clt_mgr_conn_start_http_req(c, c->wait_time_pre_http_req_msec);
 	}
 
@@ -660,8 +759,8 @@ clt_mgr_timer(evutil_socket_t sock, short which, void *arg)
 	if (m->mgr_state == CLT_MGR_STATE_COMPLETED)
 		return;
 
-	tv.tv_sec = 0;
-	tv.tv_usec = 100000;
+	tv.tv_sec = PERIODIC_TIMEREV_SEC;
+	tv.tv_usec = PERIODIC_TIMEREV_USEC;
 	evtimer_add(m->t_timerev, &tv);
 }
 
@@ -697,8 +796,8 @@ clt_mgr_start(struct clt_mgr *m)
 	clt_mgr_state_change(m, CLT_MGR_STATE_RUNNING);
 
 	/* Start things */
-	tv.tv_sec = 0;
-	tv.tv_usec = 100000;
+	tv.tv_sec = PERIODIC_TIMEREV_SEC;
+	tv.tv_usec = PERIODIC_TIMEREV_USEC;
 	evtimer_add(m->t_timerev, &tv);
 
 	tv.tv_sec = 1;

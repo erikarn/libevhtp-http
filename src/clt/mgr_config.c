@@ -19,6 +19,7 @@ mgr_config_copy_thread(const struct mgr_config *src_cfg,
 	cfg->burst_conn = src_cfg->burst_conn / nthreads;
 	cfg->target_nconn = src_cfg->target_nconn / nthreads;
 	cfg->target_request_count = src_cfg->target_request_count;
+	cfg->target_request_rate = src_cfg->target_request_rate / nthreads;
 
 	if (src_cfg->target_global_request_count > 0) {
 		cfg->target_global_request_count = src_cfg->target_global_request_count / nthreads;

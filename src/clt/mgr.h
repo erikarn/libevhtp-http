@@ -53,6 +53,11 @@ struct clt_mgr {
 	clt_thr_stats_notify_cb *stats_cb;
 	void *stats_cb_data;
 
+	/* Request rate pacing */
+	int request_rate_error;
+	int request_count_cur;
+	int request_count_target;
+
 	/* statistics */
 	struct mgr_stats stats;
 };

@@ -61,8 +61,8 @@ mgr_config_defaults(struct mgr_config *cfg)
 	/* How many connections to keep open */
 	cfg->target_nconn = 128;
 
-	/* How many to try and open every 100ms */
-	cfg->burst_conn = 10;
+	/* How many to try and open every 10ms */
+	cfg->burst_conn = 1;
 
 	/* Maximum number of requests per connection; -1 for unlimited */
 	cfg->target_request_count = -1;
@@ -147,7 +147,7 @@ usage(char *progname)
 	printf("    --host-hdr=<host header; defaults to ipv4 address>\n");
 	printf("    --number-threads=<number of worker threads>\n");
 	printf("    --target-nconn=<target number of concurrent connections>\n");
-	printf("    --burst-conn=<how many connections to open every 100ms>\n");
+	printf("    --burst-conn=<how many connections to open every 10ms>\n");
 	printf("    --target-request-count=<request count per connection, or -1 for unlimited>\n");
 	printf("    --wait-time-request-msec=<wait time before each request, in msec>\n");
 	printf("    --target-total-nconn-count=<total number of connections, or -1 for unlimited>\n");

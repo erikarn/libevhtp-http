@@ -516,8 +516,8 @@ clt_mgr_conn_create(struct clt_mgr *mgr)
 	}
 	c->mgr = mgr;
 
-	/* Select a random ipv4 */
-	addr = cfg_ipv4_array_get_random(&mgr->cfg.ipv4_dst);
+	/* Select an ipv4 address */
+	addr = cfg_ipv4_array_get_next(&mgr->cfg.ipv4_dst);
 
 	/* cfg.host_hdr == NULL? Then make it == addr */
 	if (mgr->cfg.host_hdr == NULL)

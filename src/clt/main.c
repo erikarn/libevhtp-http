@@ -246,7 +246,13 @@ parse_opts(struct mgr_config *cfg, int argc, char *argv[])
 static void
 clt_mgr_stats_print(const char *prefix, const struct mgr_stats *stats)
 {
-	printf("%s: nconn=%lld, conn_count=%llu, conn_create_failed=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu, ",
+	struct timeval tv;
+
+	(void) gettimeofday(&tv, NULL);
+
+	printf("[%lld.%06lld]: %s: nconn=%lld, conn_count=%llu, conn_create_failed=%llu, conn closing=%llu, req_count=%llu, ok=%llu, err=%llu, timeout=%llu, ",
+	    (long long int) tv.tv_sec,
+	    (long long int) tv.tv_usec,
 	    prefix,
 #if 0
 	    m->thr->t_tid,

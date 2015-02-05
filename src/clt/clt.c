@@ -268,7 +268,7 @@ clt_upstream_headers_start(evhtp_request_t * upstream_req, void *arg)
 	 * return it upon error/OK
 	 */
 	debug_printf("%s: %p: status=%d\n", __func__,
-	    r, upstream_req->status);
+	    r, evhtp_request_status(upstream_req));
 	return (EVHTP_RES_OK);
 }
 
@@ -371,7 +371,8 @@ clt_req_cb(evhtp_request_t *r, void *arg)
 	debug_printf("%s: %p: called\n", __func__, req);
 
 	/* XXX TODO: hook? */
-	clt_call_notify(req, CLT_NOTIFY_REQUEST_DONE_OK, r->status);
+	clt_call_notify(req, CLT_NOTIFY_REQUEST_DONE_OK, 
+	    evhtp_request_status(r));
 
 	evhtp_unset_all_hooks(&req->req->hooks);
 //	req->req = NULL;

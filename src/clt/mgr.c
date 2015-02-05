@@ -377,6 +377,9 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 		c->mgr->stats.req_count_err++;
 	} else if (what == CLT_NOTIFY_REQUEST_TIMEOUT) {
 		c->mgr->stats.req_count_timeout++;
+		/* For now, just close and don't issue an immediate new request */
+		clt_mgr_conn_cancel_http_req(c);
+		clt_mgr_conn_destroy(c);
 	} else if (what == CLT_NOTIFY_REQ_DESTROYING) {
 		if (clt_mgr_conn_check_create_http_request(c) &&
 		    clt_mgr_check_create_http_request(c->mgr) &&

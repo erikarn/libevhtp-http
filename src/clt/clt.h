@@ -31,6 +31,7 @@ struct client_req {
 	evhtp_connection_t *con;
 	evhtp_request_t *req;
 	struct clt_thr *thr;
+	struct event *ev_timeout;
 
 	/* Connection details */
 	char *host_ip;

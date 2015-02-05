@@ -16,6 +16,8 @@
 
 #include <netinet/in.h>
 
+#include <event2/bufferevent.h>
+
 #include <evhtp.h>
 
 #include "debug.h"
@@ -59,6 +61,24 @@ clt_call_notify(struct client_req *req, clt_notify_cmd_t ct, int data)
 
 	if (req->cb.cb != NULL)
 		req->cb.cb(req, ct, data, req->cb.cbdata);
+}
+
+static void
+clt_conn_timeout_rearm(struct client_req *r)
+{
+	struct timeval tv;
+
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+
+	evtimer_add(r->ev_timeout, &tv);
+}
+
+static void
+clt_conn_timeout_stop(struct client_req *r)
+{
+
+	evtimer_del(r->ev_timeout);
 }
 
 /*
@@ -115,6 +135,11 @@ clt_conn_destroy(struct client_req *req)
 
 	if (req->con)
 		evhtp_connection_free(req->con);
+
+	if (req->ev_timeout) {
+		evtimer_del(req->ev_timeout);
+		event_free(req->ev_timeout);
+	}
 
 	if (req->host_ip)
 		free(req->host_ip);
@@ -180,6 +205,8 @@ clt_upstream_conn_fini(evhtp_connection_t *conn, void *arg)
 	r->con = NULL;
 	r->req = NULL;
 
+	clt_conn_timeout_rearm(r);
+
 	clt_call_notify(r, CLT_NOTIFY_CONN_CLOSING, 0);
 
 	return (EVHTP_RES_OK);
@@ -201,6 +228,7 @@ clt_upstream_new_chunk(evhtp_request_t * upstream_req, uint64_t len, void * arg)
 	    __func__,
 	    r,
 	    evbuffer_get_length(ei));
+	clt_conn_timeout_rearm(r);
 	return EVHTP_RES_OK;
 }
 
@@ -211,6 +239,7 @@ clt_upstream_chunk_done(evhtp_request_t * upstream_req, void * arg)
 	size_t len;
 
 	len = evbuffer_get_length(r->req->buffer_in);
+	clt_conn_timeout_rearm(r);
 
 	debug_printf("%s: %p: called\n", __func__, r);
 	debug_printf("%s: %p: req->buffer_in len=%lu\n",
@@ -230,6 +259,7 @@ clt_upstream_chunks_done(evhtp_request_t * upstream_req, void * arg)
 	struct client_req *r = arg;
 
 	debug_printf("%s: %p: called\n", __func__, r);
+	clt_conn_timeout_rearm(r);
 
 	return (EVHTP_RES_OK);
 }
@@ -252,8 +282,11 @@ clt_upstream_error(evhtp_request_t * req, evhtp_error_flags errtype, void * arg)
 	 * clt_upstream_fini() will be called once this request
 	 * is freed.
 	 */
-
-	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_ERROR, 0);
+	if (errtype & BEV_EVENT_TIMEOUT)
+		clt_call_notify(r, CLT_NOTIFY_REQUEST_TIMEOUT, 0);
+	else
+		clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_ERROR, 0);
+	clt_conn_timeout_stop(r);
 
 	return (EVHTP_RES_OK);
 }
@@ -269,6 +302,7 @@ clt_upstream_headers_start(evhtp_request_t * upstream_req, void *arg)
 	 */
 	debug_printf("%s: %p: status=%d\n", __func__,
 	    r, evhtp_request_status(upstream_req));
+	clt_conn_timeout_rearm(r);
 	return (EVHTP_RES_OK);
 }
 
@@ -290,11 +324,22 @@ clt_upstream_fini(evhtp_request_t * upstream_req, void * arg)
 	 */
 
 	evhtp_unset_all_hooks(&r->req->hooks);
+	clt_conn_timeout_stop(r);
 	r->req = NULL;
+
 
 	clt_req_destroy(r);
 
 	return (EVHTP_RES_OK);
+}
+
+static void
+clt_conn_timeout(evutil_socket_t sock, short which, void *arg)
+{
+	struct client_req *r = arg;
+
+	/* Timeout; signify upper layers its time to close things */
+	clt_call_notify(r, CLT_NOTIFY_REQUEST_TIMEOUT, 0);
 }
 
 /*
@@ -344,6 +389,11 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
 	tv.tv_usec = 0;
 	evhtp_connection_set_timeouts(r->con, &tv, &tv);
 
+	/* And start our own timer */
+	r->ev_timeout = evtimer_new(thr->t_evbase,
+	    clt_conn_timeout,
+	    r);
+
 	debug_printf("%s: %p: called; con=%p\n", __func__, r, r->con);
 	return (r);
 
@@ -356,6 +406,10 @@ error:
 		free(r->uri);
 	if (r && r->con)
 		evhtp_connection_free(r->con);
+	if (r && r->ev_timeout) {
+		evtimer_del(r->ev_timeout);
+		event_free(r->ev_timeout);
+	}
 	if (r != NULL)
 		free(r);
 	return (NULL);
@@ -380,7 +434,7 @@ clt_req_cb(evhtp_request_t *r, void *arg)
 	/* XXX TODO: hook? */
 	clt_call_notify(req, CLT_NOTIFY_REQUEST_DONE_OK, 
 	    evhtp_request_status(r));
-
+	clt_conn_timeout_stop(req);
 	evhtp_unset_all_hooks(&req->req->hooks);
 //	req->req = NULL;
 	req->con->request = NULL;

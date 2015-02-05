@@ -94,6 +94,16 @@ cfg_ipv4_array_get_random(const struct cfg_ipv4_array *r)
 	return (r->ipv4[random() % r->n]);
 }
 
+const char *
+cfg_ipv4_array_get_next(struct cfg_ipv4_array *r)
+{
+	const char *c;
+
+	c = r->ipv4[r->cur];
+	r->cur = (r->cur + 1) % r->n;
+	return (c);
+}
+
 int
 cfg_ipv4_array_nentries(const struct cfg_ipv4_array *r)
 {

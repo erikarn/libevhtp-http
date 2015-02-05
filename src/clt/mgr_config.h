@@ -12,6 +12,7 @@
 struct cfg_ipv4_array {
 	char *ipv4[CFG_IPV4_ARRAY_MAX];
 	int n;
+	int cur;
 };
 
 /*
@@ -67,6 +68,7 @@ extern	int cfg_ipv4_array_add(struct cfg_ipv4_array *a,
 extern	void cfg_ipv4_array_dup(struct cfg_ipv4_array *dst,
 	    const struct cfg_ipv4_array *src);
 extern	const char * cfg_ipv4_array_get_random(const struct cfg_ipv4_array *r);
+extern	const char * cfg_ipv4_array_get_next(struct cfg_ipv4_array *r);
 extern	int cfg_ipv4_array_nentries(const struct cfg_ipv4_array *r);
 
 #endif	/* __MGR_CONFIG_H__ */

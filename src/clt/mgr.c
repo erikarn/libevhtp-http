@@ -229,6 +229,10 @@ clt_mgr_conn_check_create_http_request(struct clt_mgr_conn *c)
 	    (c->mgr->mgr_state != CLT_MGR_STATE_RUNNING))
 		return(0);
 
+	/* Non-keepalive? Don't issue a second one */
+	if (c->mgr->cfg.http_keepalive == 0)
+		return (0);
+
 	if ((c->target_request_count > 0) &&
 	    (c->cur_req_count >= c->target_request_count))
 		return (0);

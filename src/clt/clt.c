@@ -230,9 +230,6 @@ clt_upstream_chunks_done(evhtp_request_t * upstream_req, void * arg)
 	struct client_req *r = arg;
 
 	debug_printf("%s: %p: called\n", __func__, r);
-	/* XXX is this ok here? What if we get 200 OK but we don't get the full response? */
-	/* XXX this should be called by the general _cb() request handler */
-	clt_call_notify(r, CLT_NOTIFY_REQUEST_DONE_OK, upstream_req->status);
 
 	return (EVHTP_RES_OK);
 }
@@ -374,6 +371,7 @@ clt_req_cb(evhtp_request_t *r, void *arg)
 	debug_printf("%s: %p: called\n", __func__, req);
 
 	/* XXX TODO: hook? */
+	clt_call_notify(req, CLT_NOTIFY_REQUEST_DONE_OK, r->status);
 
 	evhtp_unset_all_hooks(&req->req->hooks);
 //	req->req = NULL;

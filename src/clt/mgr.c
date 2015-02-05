@@ -49,6 +49,8 @@
  */
 #define	REQRATE_FIXED_MULT	1000
 
+static struct clt_mgr_conn * clt_mgr_conn_create(struct clt_mgr *mgr);
+
 const char *
 clt_mgr_state_str(clt_mgr_state_t state)
 {
@@ -320,10 +322,39 @@ clt_mgr_check_waiting_finished(struct clt_mgr *mgr)
 }
 
 static int
+clt_mgr_conn_try_create(struct clt_mgr *m)
+{
+	struct clt_mgr_conn *c;
+
+	/* break if we hit our global connection limit */
+	if (! clt_mgr_check_create_conn(m))
+		return (-1);
+	if (! clt_mgr_reqrate_pacer_check(m))
+		return (-1);
+	c = clt_mgr_conn_create(m);
+	if (c == NULL) {
+		m->stats.nconn_create_failed++;
+		/*
+		 * For now break out; let's only handle one
+		 * failure per clock tick to minimize damage.
+		 */
+		return (-1);
+	}
+	m->stats.nconn ++;
+	c->mgr->stats.conn_count++;
+	/* Kick start a HTTP request */
+	clt_mgr_reqrate_pacer_inc(m);
+	clt_mgr_conn_start_http_req(c, c->wait_time_pre_http_req_msec);
+
+	return (0);
+}
+
+static int
 clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
     int data, void *cbdata)
 {
 	struct clt_mgr_conn *c = cbdata;
+	struct clt_mgr *m = c->mgr;
 
 #if 1
 	debug_printf("%s: %p: called, r=%p; what=%d (%s)\n",
@@ -375,6 +406,21 @@ clt_mgr_conn_notify_cb(struct client_req *r, clt_notify_cmd_t what,
 		 * sigh.
 		 */
 		c->mgr->stats.conn_closing_count ++;
+
+		/*
+		 * Check if we have enough connections available in
+		 * the connection pacer for this period and if so,
+		 * fire off another connection.
+		 *
+		 * .. the burst rate doesn't count here, as it
+		 * is for limiting new connections being created
+		 * to make up for there not being enough; not
+		 * creating new ones after we've closed one.
+		 *
+		 * .. also, would be nice to add an option to delay it.
+		 */
+		(void) clt_mgr_conn_try_create(m);
+
 		return (0);
 	}
 
@@ -591,25 +637,8 @@ clt_mgr_timer_state_running(struct clt_mgr *m)
 	    (i < m->cfg.target_nconn &&
 	    j <= m->cfg.burst_conn);
 	    i++, j++) {
-		/* break if we hit our global connection limit */
-		if (! clt_mgr_check_create_conn(m))
+		if (clt_mgr_conn_try_create(m) < 0)
 			break;
-		if (! clt_mgr_reqrate_pacer_check(m))
-			break;
-		c = clt_mgr_conn_create(m);
-		if (c == NULL) {
-			m->stats.nconn_create_failed++;
-			/*
-			 * For now break out; let's only handle one
-			 * failure per clock tick to minimize damage.
-			 */
-			break;
-		}
-		m->stats.nconn ++;
-		c->mgr->stats.conn_count++;
-		/* Kick start a HTTP request */
-		clt_mgr_reqrate_pacer_inc(m);
-		clt_mgr_conn_start_http_req(c, c->wait_time_pre_http_req_msec);
 	}
 
 	/*

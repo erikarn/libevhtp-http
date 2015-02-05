@@ -307,6 +307,7 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
     const char *host_ip, const char *host_hdr, int port)
 {
 	struct client_req *r;
+	struct timeval tv;
 
 	r = calloc(1, sizeof(*r));
 	if (r == NULL) {
@@ -337,6 +338,12 @@ clt_conn_create(struct clt_thr *thr, clt_notify_cb *cb, void *cbdata,
 
 	evhtp_set_hook(&r->con->hooks, evhtp_hook_on_connection_fini,
 	    clt_upstream_conn_fini, r);
+
+	/* 5 second timeout on requests */
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+	evhtp_connection_set_timeouts(r->con, &tv, &tv);
+
 	debug_printf("%s: %p: called; con=%p\n", __func__, r, r->con);
 	return (r);
 
